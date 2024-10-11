@@ -3,7 +3,6 @@
     "version": "0.0.1",
     "description": "server for FChat app",
     "author": "Flain",
-    "private": false,
     "license": "CC BY-NC-ND 4.0",
     "scripts": {
         "build": "nest build",
