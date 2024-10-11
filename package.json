@@ -1,10 +1,10 @@
 {
     "name": "server",
     "version": "0.0.1",
-    "description": "backend for FChat app",
+    "description": "server for FChat app",
     "author": "Flain",
-    "private": true,
-    "license": "UNLICENSED",
+    "private": false,
+    "license": "CC BY-NC-ND 4.0",
     "scripts": {
         "build": "nest build",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
