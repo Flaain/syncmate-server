@@ -34,7 +34,7 @@ import { JWT_KEYS } from 'src/utils/types';
 import { ConversationService } from '../conversation/conversation.service';
 import { PRESENCE } from '../user/types';
 
-@WebSocketGateway({ cors: { origin: ['http://localhost:4173', 'http://localhost:5173'], credentials: true } })
+@WebSocketGateway({ cors: { origin: ['http://localhost:4173', 'http://localhost:5173', 'https://fchat-client.vercel.app'], credentials: true } })
 export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
     private server: Server;
