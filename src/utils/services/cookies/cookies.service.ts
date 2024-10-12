@@ -8,7 +8,7 @@ export const REFRESH_PATH = '/auth/refresh';
 @Injectable()
 export class CookiesService {
     private readonly cookieDefault: CookieOptions = {
-        sameSite: 'strict',
+        sameSite: 'none',
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
     };
