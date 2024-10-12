@@ -13,7 +13,7 @@ import { cookieParser } from './utils/middlewares/cookieParser';
 
         const app = await NestFactory.create<NestExpressApplication>(AppModule, { 
             cors: { 
-                origin: ['http://localhost:4173', 'http://localhost:5173'], 
+                origin: ['http://localhost:4173', 'http://localhost:5173', 'fchat-client.vercel.app'], 
                 credentials: true
             } 
         });
