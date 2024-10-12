@@ -19,28 +19,83 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
         super(feedModel);
     }
 
-    search = async ({ initiatorId, query }: Pick<Pagination, 'query'> & { initiatorId: Types.ObjectId }) => {
-        return Promise.all([
-            this.userService.find({
-                filter: {
-                    $or: [{ login: { $regex: query, $options: 'i' } }, { name: { $regex: query, $options: 'i' } }],
+    search = async ({ initiatorId, query, limit, page }: Pick<Pagination, 'query' | 'limit' | 'page'> & { initiatorId: Types.ObjectId }) => {
+        return this.userService.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { login: { $regex: query, $options: 'i' } },
+                        { name: { $regex: query, $options: 'i' } },
+                    ],
                     _id: { $ne: initiatorId },
                     isDeleted: false,
                     isPrivate: false,
                 },
-                projection: { _id: 1, name: 1, login: 1, isOfficial: 1 },
-                options: { populate: { path: 'avatar', model: 'File', select: 'url' }, sort: { createdAt: -1 } },
-            }),
-            this.groupService.find({
-                filter: {
-                    $or: [{ login: { $regex: query, $options: 'i' } }, { name: { $regex: query, $options: 'i' } }],
-                    isPrivate: false,
+            },
+            {
+                $lookup: {
+                    from: 'files',
+                    localField: 'avatar',
+                    foreignField: '_id',
+                    as: 'avatar',
                 },
-                projection: { _id: 1, name: 1, login: 1, isOfficial: 1 },
-                options: { populate: { path: 'avatar', model: 'File', select: 'url' }, sort: { createdAt: -1 } },
-            }),
+            },
+            {
+                $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true },
+            },
+            {
+                $project: {
+                    _id: 1,
+                    name: 1,
+                    login: 1,
+                    isOfficial: 1,
+                    createdAt: 1,
+                    'avatar.url': 1,
+                    type: { $literal: 'User' },
+                },
+            },
+            {
+                $unionWith: {
+                    coll: 'groups',
+                    pipeline: [
+                        {
+                            $match: {
+                                $or: [
+                                    { login: { $regex: query, $options: 'i' } },
+                                    { name: { $regex: query, $options: 'i' } },
+                                ],
+                                isPrivate: false,
+                            },
+                        },
+                        {
+                            $lookup: {
+                                from: 'files',
+                                localField: 'avatar',
+                                foreignField: '_id',
+                                as: 'avatar',
+                            },
+                        },
+                        { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                name: 1,
+                                login: 1,
+                                isOfficial: 1,
+                                createdAt: 1,
+                                'avatar.url': 1,
+                                type: { $literal: 'Group' },
+                            },
+                        },
+                    ],
+                },
+            },
+            { $sort: { createdAt: -1 } },
+            { $skip: page * limit },
+            { $limit: limit },
         ]);
     };
+    
 
     getFeed = async ({ initiatorId, cursor }: GetFeedParams) => {
         const config = { limit: 10, nextCursor: null };

@@ -2,12 +2,11 @@ import { Controller, Delete, Get, Param, Query, Req, UseGuards } from '@nestjs/c
 import { ConversationService } from './conversation.service';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { IConversationController } from './types';
 import { AccessGuard } from 'src/utils/guards/access.guard';
 import { CONVERSATION_EVENTS } from '../gateway/types';
 
 @Controller(Routes.CONVERSATION)
-export class ConversationController implements IConversationController {
+export class ConversationController {
     constructor(
         private readonly conversationService: ConversationService,
         private readonly eventEmitter: EventEmitter2,

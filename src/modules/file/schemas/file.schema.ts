@@ -1,8 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { IFile } from '../types';
 
 @Schema({ timestamps: true })
-export class File implements Omit<IFile, '_id'> {
+export class File {
     @Prop({ type: String, required: true })
     key: string;
 

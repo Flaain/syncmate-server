@@ -2,11 +2,10 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { Routes } from 'src/utils/types';
 import { OtpCreateDTO } from './dtos/otp.create.dto';
 import { OtpService } from './otp.service';
-import { IOtpController } from './types';
 import { OtpVerifyDTO } from './dtos/otp.verify.dto';
 
 @Controller(Routes.OTP)
-export class OtpController implements IOtpController {
+export class OtpController {
     constructor(private readonly otpService: OtpService) {}
 
     @Post()

@@ -4,18 +4,18 @@ import { InjectModel } from '@nestjs/mongoose';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
-import { emailExistError, loginExistError } from '../auth/constants';
-import { IUserService, UserDocument, UserSearchParams } from './types';
+import { UserDocument, UserSearchParams } from './types';
 import { Model, isValidObjectId } from 'mongoose';
-import { IAppException, Providers } from 'src/utils/types';
+import { Providers } from 'src/utils/types';
 import { UserStatusDTO } from './dtos/user.status.dto';
 import { UserNameDto } from './dtos/user.name.dto';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { FileService } from '../file/file.service';
+import { checkErrors } from './constants';
 
 @Injectable()
-export class UserService extends BaseService<UserDocument, User> implements IUserService {
+export class UserService extends BaseService<UserDocument, User> {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>, 
         @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
@@ -70,17 +70,12 @@ export class UserService extends BaseService<UserDocument, User> implements IUse
     check = async (dto: z.infer<typeof userCheckSchema>) => {
         const parsedQuery = userCheckSchema.parse(dto);
 
-        const errors: Record<typeof parsedQuery.type, Pick<IAppException, 'message' | 'errors'>> = {
-            email: emailExistError,
-            login: loginExistError,
-        };
-
         const user = await this.exists({
             [parsedQuery.type]: { $regex: parsedQuery[parsedQuery.type], $options: 'i' },
             isDeleted: false,
         });
 
-        if (user) throw new AppException(errors[parsedQuery.type], HttpStatus.CONFLICT);
+        if (user) throw new AppException(checkErrors[parsedQuery.type], HttpStatus.CONFLICT);
 
         return { status: HttpStatus.OK, message: 'OK' };
     };

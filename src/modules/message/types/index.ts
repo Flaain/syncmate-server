@@ -1,5 +1,5 @@
 import { Message } from "../schemas/message.schema"
-import { Document, SchemaTimestampsConfig, Types } from 'mongoose';
+import { Document, HydratedDocument, SchemaTimestampsConfig, Types } from 'mongoose';
 import { MessageSendDTO } from '../dtos/message.send.dto';
 import { MessageDeleteDTO } from '../dtos/message.delete.dto';
 import { MessageEditDTO } from '../dtos/message.edit.dto';
@@ -33,7 +33,7 @@ export interface IMessageController {
     edit(req: RequestWithUser, dto: MessageEditDTO, messageId: string): Promise<Message>;
 }
 
-export type MessageDocument = Message & Document & SchemaTimestampsConfig;
+export type MessageDocument = HydratedDocument<Message>;
 
 export type SendMessageParams = MessageSendDTO & { recipientId: string; initiator: UserDocument };
 export type EditMessageParams = MessageEditDTO & { initiatorId: Types.ObjectId, messageId: string };

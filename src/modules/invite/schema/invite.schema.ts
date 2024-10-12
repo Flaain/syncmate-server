@@ -1,9 +1,8 @@
 import mongoose from 'mongoose';
 import { Prop, SchemaFactory } from '@nestjs/mongoose';
-import { InviteInterface } from '../types';
 import { DatesService } from 'src/utils/services/dates/dates.service';
 
-export class Invite implements InviteInterface {
+export class Invite{
     @Prop({ type: String, required: true })
     code: string;
 

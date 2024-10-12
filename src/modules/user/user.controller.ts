@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { UserService } from './user.service';
 import { Pagination, RequestWithUser, Routes } from 'src/utils/types';
-import { CheckType, IUserController } from './types';
+import { CheckType } from './types';
 import { AccessGuard } from 'src/utils/guards/access.guard';
 import { UserStatusDTO } from './dtos/user.status.dto';
 import { UserNameDto } from './dtos/user.name.dto';
@@ -13,7 +13,7 @@ import { filePipe } from './constants';
 import { CONVERSATION_EVENTS } from '../gateway/types';
 
 @Controller(Routes.USER)
-export class UserController extends PaginationResolver implements IUserController {
+export class UserController extends PaginationResolver {
     constructor(
         private readonly userService: UserService,
         private readonly eventEmitter: EventEmitter2,

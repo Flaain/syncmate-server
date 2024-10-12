@@ -3,7 +3,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { IConversation } from '../types';
 
 @Schema({ timestamps: true })
-export class Conversation implements Omit<IConversation, '_id'> {
+export class Conversation {
     @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] })
     participants: Array<mongoose.Types.ObjectId>;
 

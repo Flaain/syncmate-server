@@ -2,7 +2,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, isValidObjectId } from 'mongoose';
 import { Conversation } from './schemas/conversation.schema';
-import { ConversationDocument, IConversationService } from './types';
+import { ConversationDocument } from './types';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { Message } from '../message/schemas/message.schema';
 import { UserService } from '../user/user.service';
@@ -15,7 +15,7 @@ import { User } from '../user/schemas/user.schema';
 import { FeedService } from '../feed/feed.service';
 
 @Injectable()
-export class ConversationService extends BaseService<ConversationDocument, Conversation> implements IConversationService {
+export class ConversationService extends BaseService<ConversationDocument, Conversation> {
     constructor(
         @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
         @InjectModel(Message.name) private readonly messageModel: Model<Message>,

@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { FEED_TYPE, IFeed } from '../types';
+import { FEED_TYPE } from '../types';
 
 @Schema({ timestamps: true })
-export class Feed implements Omit<IFeed, '_id'> {
+export class Feed {
     @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId }], ref: 'User', required: true })
     users: Array<mongoose.Types.ObjectId>;
 

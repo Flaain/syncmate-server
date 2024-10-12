@@ -6,7 +6,7 @@ import { AuthService } from './auth.service';
 import { RequestWithSession, RequestWithUser, Routes } from 'src/utils/types';
 import { Body, Controller, Get, HttpStatus, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { CookiesService } from 'src/utils/services/cookies/cookies.service';
-import { AuthChangePasswordType, IAuthController } from './types';
+import { AuthChangePasswordType } from './types';
 import { AccessGuard } from 'src/utils/guards/access.guard';
 import { RefreshGuard } from 'src/utils/guards/refresh.guard';
 import { ForgotDTO } from './dtos/auth.forgot.dto';
@@ -14,7 +14,7 @@ import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
 
 @Controller(Routes.AUTH)
-export class AuthController implements IAuthController {
+export class AuthController {
     constructor(
         private readonly authService: AuthService,
         private readonly cookiesService: CookiesService,

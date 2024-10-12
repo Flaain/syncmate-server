@@ -1,9 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { IOtp, OtpType } from '../types';
+import { OtpType } from '../types';
 import { DatesService } from 'src/utils/services/dates/dates.service';
 
 @Schema({ collection: 'otp_codes', timestamps: true })
-export class OTP implements IOtp {
+export class OTP {
     @Prop({ type: String, required: true })
     email: string;
 

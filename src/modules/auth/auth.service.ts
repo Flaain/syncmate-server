@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { Types } from 'mongoose';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { IAuthService, WithUserAgent } from './types';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { WithUserAgent } from './types';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { JWT_KEYS, Providers } from 'src/utils/types';
+import { JWT_KEYS } from 'src/utils/types';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BcryptService } from 'src/utils/services/bcrypt/bcrypt.service';
 import { incorrectPasswordError, otpError } from './constants';
@@ -14,7 +14,7 @@ import { UserService } from '../user/user.service';
 import { OtpService } from '../otp/otp.service';
 import { SessionService } from '../session/session.service';
 import { OtpType } from '../otp/types';
-import { IUser, UserDocument } from '../user/types';
+import { UserDocument } from '../user/types';
 import { User } from '../user/schemas/user.schema';
 import { SessionDocument } from '../session/types';
 import { ForgotDTO } from './dtos/auth.forgot.dto';
@@ -22,7 +22,7 @@ import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
 
 @Injectable()
-export class AuthService implements IAuthService {
+export class AuthService {
     constructor(
         private readonly userService: UserService,
         private readonly jwtService: JwtService,
@@ -71,7 +71,7 @@ export class AuthService implements IAuthService {
         }
 
         const hashedPassword = await this.bcryptService.hashAsync(password);
-        const { password: _, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject<IUser>();
+        const { password: _, blockList, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
         const session = await this.sessionService.create({ userId: restUser._id, userAgent });
 
         return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: restUser._id.toString() }) };
@@ -154,7 +154,7 @@ export class AuthService implements IAuthService {
     };
 
     profile = async (user: UserDocument) => {
-        const { password, blockList, ...rest } = user.toObject<User>();
+        const { password, blockList, ...rest } = user.toObject();
 
         return { ...rest };
     };

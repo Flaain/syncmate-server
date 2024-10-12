@@ -1,9 +1,8 @@
 import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { IGroup } from '../types';
 
 @Schema({ timestamps: true })
-export class Group implements IGroup {
+export class Group {
     @Prop({ type: String, required: true, unique: true })
     login: string;
 

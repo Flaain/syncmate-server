@@ -1,8 +1,5 @@
-import { Document, SchemaTimestampsConfig, Types } from 'mongoose';
-import { ConversationCreateDTO } from '../dtos/conversation.create.dto';
+import { HydratedDocument, Types } from 'mongoose';
 import { Conversation } from '../schemas/conversation.schema';
-import { RequestWithUser } from 'src/utils/types';
-import { UserDocument } from 'src/modules/user/types';
 import { User } from 'src/modules/user/schemas/user.schema';
 
 export enum CONVERSATION_HEALTH {
@@ -19,7 +16,7 @@ export interface IConversation {
     messages?: Array<Types.ObjectId>;
 }
 
-export type ConversationDocument = Conversation & Document & SchemaTimestampsConfig;
+export type ConversationDocument = HydratedDocument<Conversation>
 
 export interface GetConversationReturn {
     conversation: {
@@ -34,21 +31,4 @@ export interface CreateConversationReturn {
     _id: Types.ObjectId;
     lastMessageSentAt: Date;
     recipient: Omit<User, 'password' | 'birthDate'>;
-}
-
-export interface IConversationService {
-    getConversation: (params: {
-        initiator: UserDocument;
-        recipientId: string;
-        cursor?: string;
-    }) => Promise<GetConversationReturn>;
-    deleteConversation: (params: {
-        initiatorId: Types.ObjectId;
-        recipientId: string;
-    }) => Promise<{ _id: Types.ObjectId; recipientId: string }>;
-}
-
-export interface IConversationController {
-    delete: (req: RequestWithUser, id: string) => Promise<{ conversationId: Types.ObjectId }>;
-    getConversation(req: RequestWithUser, recipientId: string, cursor?: string): Promise<GetConversationReturn>;
 }

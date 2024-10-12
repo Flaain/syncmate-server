@@ -3,14 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { OTP } from './schemas/otp.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
-import { IOtpService, OtpDocument, OtpType } from './types';
+import { OtpDocument, OtpType } from './types';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { OtpVerifyDTO } from './dtos/otp.verify.dto';
 import { BaseService } from 'src/utils/services/base/base.service';
 
 @Injectable()
-export class OtpService extends BaseService<OtpDocument, OTP> implements IOtpService {
+export class OtpService extends BaseService<OtpDocument, OTP> {
     constructor(
         @InjectModel(OTP.name) private readonly otpModel: Model<OtpDocument>,
         private readonly userService: UserService,

@@ -20,15 +20,6 @@ export class FeedController extends PaginationResolver {
     @Get('search')
     @UseGuards(AccessGuard)
     async search(@Req() req: RequestWithUser, @PaginationDecorator() params: Pagination) {
-        const [users, groups] = await this.feedService.search({ ...params, initiatorId: req.user.doc._id });
-
-        return this.wrapPagination({ 
-            ...params, 
-            items: [...users, ...groups],
-            onSuccess: (items) => items.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map((item) => ({ 
-                ...item.toObject(), 
-                type: item.collection.name[0].toUpperCase() + item.collection.name.slice(1, -1)
-            }))
-        });
+        return this.feedService.search({ ...params, initiatorId: req.user.doc._id });
     }
 }

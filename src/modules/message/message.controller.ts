@@ -13,7 +13,7 @@ import { CONVERSATION_EVENTS } from '../gateway/types';
 
 @Throttle({ default: { limit: 50, ttl: 60000 } })
 @Controller(Routes.MESSAGE)
-export class MessageController implements IMessageController {
+export class MessageController {
     constructor(
         private readonly messageService: MessageService,
         private readonly eventEmitter: EventEmitter2
