@@ -22,7 +22,7 @@ export class AuthRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh
     private static extractJWT = (req: Request) => (AuthCookiesName.REFRESH_TOKEN in req.cookies) ? req.cookies[AuthCookiesName.REFRESH_TOKEN] : null;
 
     validate = async ({ sessionId }: { sessionId: string }) => {
-        console.log('session id here')
+        console.log('session id here', sessionId)
         const session = await this.sessionService.validate(sessionId);
         
         return { session };
