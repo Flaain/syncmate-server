@@ -17,6 +17,7 @@ export enum Routes {
     GROUP = 'group',
     FEED = 'feed',
     SESSION = 'session',
+    CLOUD = 'cloud',
     CONVERSATION = 'conversation',
     PARTICIPANT = 'participant',
     MESSAGE = 'message',

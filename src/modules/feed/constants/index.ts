@@ -1,35 +1,55 @@
-import { getSignedUrl } from 'src/utils/helpers/getSignedUrl';
-import { FEED_TYPE, FeedHandlers } from '../types';
-
-export const feedHandlers: Record<FEED_TYPE, FeedHandlers> = {
+import { PipelineStage, Types } from 'mongoose';
+import { FEED_TYPE } from '../types';
+export const feedMapper: Record<FEED_TYPE, { lookup: (initiatorId: Types.ObjectId) => PipelineStage }> = {
     Conversation: {
-        populate: (initiatorId) => ({
-            path: 'item',
-            select: 'participants lastMessage',
-            populate: [
-                {
-                    path: 'participants',
-                    model: 'User',
-                    select: 'login name isOfficial isDeleted presence avatar',
-                    populate: { path: 'avatar', model: 'File', select: 'url' },
-                    match: { _id: { $ne: initiatorId } },
-                },
-                {
-                    path: 'lastMessage',
-                    model: 'Message',
-                    select: 'text sender createdAt',
-                    populate: { path: 'sender', model: 'User', select: 'name' },
-                },
-            ],
+        lookup: (initiatorId) => ({
+            $lookup: {
+                from: 'conversations',
+                localField: 'item',
+                foreignField: '_id',
+                as: '_temporaryConversation',
+                pipeline: [
+                    { 
+                        $lookup: { 
+                            from: 'users', 
+                            localField: 'participants',
+                            foreignField: '_id',
+                            pipeline: [
+                                { $match: { $expr: { $ne: ['$_id', initiatorId] } } }, 
+                                { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { _id: 1, url: 1 } }] } }, 
+                                { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } }, 
+                                { $project: { login: 1, name: 1, isOfficial: 1, isDeleted: 1, presence: 1, avatar: 1 } }
+                            ], 
+                            as: 'participants' 
+                        } 
+                    },
+                    { 
+                        $lookup: { 
+                            from: 'messages', 
+                            localField: 'lastMessage', 
+                            foreignField: '_id', 
+                            as: 'lastMessage',
+                            pipeline: [
+                                { 
+                                    $lookup: { 
+                                        from: 'users', 
+                                        localField: 'sender', 
+                                        foreignField: '_id', 
+                                        as: 'sender',
+                                        pipeline: [{ $project: { _id: 1, name: 1 } }] 
+                                    }
+                                },
+                                { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
+                                { $project: { _id: 1, text: 1, createdAt: 1, sender: 1 } }
+                            ]
+                        } 
+                    },
+                    { $unwind: { path: '$lastMessage', preserveNullAndEmptyArrays: true } },
+                    { $project: { _id: 1, lastMessage: 1, recipient: { $first: '$participants' } } }
+                ],
+            },
         }),
-        canPreSignUrl: (doc) => !!doc.item.participants[0].avatar,
-        getPreSignedUrl: (doc, client) => getSignedUrl(client, doc.item.participants[0].avatar.key),
-        returnObject: ({ item: { participants, ...restItem }, ...doc }) => ({ ...doc, ...restItem, recipient: participants[0] }),
     },
-    Group: {
-        populate: () => ({ path: 'item' }),
-        canPreSignUrl: (doc) => !!doc.item.avatar,
-        getPreSignedUrl: async () => '#',
-        returnObject: (doc) => doc,
-    }
+    Group: { lookup: () => ({ $lookup: { from: 'groups', localField: 'item', as: '#' } }) },
+    Cloud: { lookup: () => ({ $lookup: { from: 'groups', localField: 'item', as: '#' } }) },
 };

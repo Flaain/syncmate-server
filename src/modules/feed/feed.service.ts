@@ -1,19 +1,17 @@
 import { Model, Types } from 'mongoose';
 import { Injectable } from '@nestjs/common';
-import { GroupService } from '../group/group.service';
 import { Pagination } from 'src/utils/types';
 import { UserService } from '../user/user.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { FeedDocument, GetFeedParams } from './types';
 import { Feed } from './schemas/feed.schema';
-import { feedHandlers } from './constants';
+import { feedMapper } from './constants';
 
 @Injectable()
 export class FeedService extends BaseService<FeedDocument, Feed> {
     constructor(
         private readonly userService: UserService,
-        private readonly groupService: GroupService,
         @InjectModel(Feed.name) private readonly feedModel: Model<FeedDocument>,
     ) {
         super(feedModel);
@@ -50,7 +48,7 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
                     login: 1,
                     isOfficial: 1,
                     createdAt: 1,
-                    'avatar.url': 1,
+                    avatar: 1,
                     type: { $literal: 'User' },
                 },
             },
@@ -83,7 +81,7 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
                                 login: 1,
                                 isOfficial: 1,
                                 createdAt: 1,
-                                'avatar.url': 1,
+                                avatar: 1,
                                 type: { $literal: 'Group' },
                             },
                         },
@@ -100,21 +98,29 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
     getFeed = async ({ initiatorId, cursor }: GetFeedParams) => {
         const config = { limit: 10, nextCursor: null };
 
-        const feed = await this.find({
-            filter: { users: { $in: initiatorId }, ...(cursor && { lastActionAt: { $lt: cursor } }) },
-            projection: { item: 1, type: 1, lastActionAt: 1 },
-            options: { limit: config.limit, sort: { lastActionAt: -1 } },
-        });
-
-        const populatedFeed = await Promise.all(feed.map(async (item: FeedDocument) => {
-            const itemHandlers = feedHandlers[item.type];
-            const populatedItem = await item.populate(itemHandlers.populate(initiatorId));
-
-            return itemHandlers.returnObject(populatedItem.toObject());
-        }));
-
+        const feed = await this.aggregate([
+            { $match: { users: { $in: [initiatorId] }, ...(cursor && { lastActionAt: { $lt: cursor } }) } },
+            { $sort: { lastActionAt: -1 } },
+            { $limit: config.limit },
+            feedMapper.Conversation.lookup(initiatorId),
+            {
+                $set: {
+                    item: {
+                        $mergeObjects: [
+                            { $first: '$_temporaryConversation' },
+                            { $first: '$_temporaryGroup' },
+                            { $first: '$_temporaryCloud' },
+                        ],
+                    },
+                },
+            },
+            { $unset: ['_temporaryConversation', '_temporaryGroup', '_temporaryCloud'] },
+            { $project: { _id: 1, type: 1, lastActionAt: 1, item: 1 } }
+        ]);
+    
         feed.length === config.limit && (config.nextCursor = feed[config.limit - 1].lastActionAt.toISOString());
-
-        return { feed: populatedFeed, nextCursor: config.nextCursor };
+    
+        return { feed, nextCursor: config.nextCursor };
     };
+    
 }
