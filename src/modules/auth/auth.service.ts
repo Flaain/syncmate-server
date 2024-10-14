@@ -140,12 +140,10 @@ export class AuthService {
         return { status: HttpStatus.OK, message: 'OK' };
     }
 
-    validate = async (id: Types.ObjectId | string) => {
+    validate = async (_id: Types.ObjectId | string) => {
         const candidate = await this.userService.findOne({
-            filter: { _id: id, isDeleted: false },
-            options: {
-                populate: { path: 'avatar', model: 'File', select: 'url' },
-            },
+            filter: { _id, isDeleted: false },
+            options: { populate: { path: 'avatar', model: 'File', select: 'url' } },
         });
 
         if (!candidate) throw new AppException({ message: "Unauthorized" }, HttpStatus.UNAUTHORIZED);

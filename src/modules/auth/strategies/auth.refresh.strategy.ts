@@ -22,8 +22,9 @@ export class AuthRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh
     private static extractJWT = (req: Request) => (AuthCookiesName.REFRESH_TOKEN in req.cookies) ? req.cookies[AuthCookiesName.REFRESH_TOKEN] : null;
 
     validate = async ({ sessionId }: { sessionId: string }) => {
+        console.log('session id here')
         const session = await this.sessionService.validate(sessionId);
         
-        return { session }; // <-- this is stupid. Cuz validate return, puts user object in request. So i decided to return object session for user.session instead of user as session
+        return { session };
     };
 }
