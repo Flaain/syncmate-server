@@ -28,8 +28,8 @@ export enum FEED_EVENTS {
     CREATE_MESSAGE = 'feed.create.message',
     EDIT_MESSAGE = 'feed.edit.message',
     DELETE_MESSAGE = 'feed.delete.message',
-    CREATE_CONVERSATION = 'feed.create.conversation',
-    DELETE_CONVERSATION = 'feed.delete.conversation',
+    CREATE = 'feed.create',
+    DELETE = 'feed.delete',
     START_TYPING = 'feed.start.typing',
     STOP_TYPING = 'feed.stop.typing',
     USER_PRESENCE = 'feed.user.presence',
@@ -58,9 +58,7 @@ export interface ConversationEditMessageParams extends ConversationSendMessagePa
 
 export interface ConversationCreateParams {
     initiator: UserDocument;
-    conversationId: string;
-    recipient: Pick<UserDocument, 'name' | 'email' | '_id'>;
-    lastMessageSentAt: Date;
+    feedItem: 
 }
 
 export interface ConversationDeleteParams {

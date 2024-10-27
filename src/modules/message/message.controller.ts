@@ -5,7 +5,6 @@ import { RequestWithUser, Routes } from 'src/utils/types';
 import { MessageDeleteDTO } from './dtos/message.delete.dto';
 import { MessageEditDTO } from './dtos/message.edit.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { IMessageController } from './types';
 import { AccessGuard } from 'src/utils/guards/access.guard';
 import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Throttle } from '@nestjs/throttler';
@@ -22,13 +21,13 @@ export class MessageController {
     @Post('send/:recipientId')
     @UseGuards(AccessGuard)
     async send(@Req() req: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId') recipientId: string) {
-        const { recipient, message, conversation, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: req.user.doc });
+        const { feedItem, message, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: req.user.doc });
 
        isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
-            recipient: recipient.toObject(),
+            recipient: feedItem.item.recipient.toObject(),
             initiator: req.user.doc,
-            conversationId: conversation._id,
-            lastMessageSentAt: conversation.lastMessageSentAt,
+            conversationId: feedItem.item._id.toString(),
+            lastMessageSentAt: feedItem.item.lastMesssage.createdAt,
         });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {

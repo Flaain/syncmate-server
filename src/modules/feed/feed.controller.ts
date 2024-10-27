@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { AccessGuard } from 'src/utils/guards/access.guard';
 import { Pagination, RequestWithUser, Routes } from 'src/utils/types';
 import { FeedService } from './feed.service';
@@ -13,8 +13,8 @@ export class FeedController extends PaginationResolver {
 
     @Get()
     @UseGuards(AccessGuard)
-    getFeed(@Req() req: RequestWithUser) {
-        return this.feedService.getFeed({ initiatorId: req.user.doc._id });
+    getFeed(@Req() req: RequestWithUser, @Query('cursor') cursor?: string) {
+        return this.feedService.getFeed({ initiatorId: req.user.doc._id, cursor });
     }
 
     @Get('search')

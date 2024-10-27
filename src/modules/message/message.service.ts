@@ -70,35 +70,41 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         const newMessage = await this.create({ sender: initiator._id, text: message.trim(), refPath: MessageRefPath.USER });
 
-        const updateQuery = { lastMessage: newMessage._id, lastMessageSentAt: newMessage.createdAt }
-        
-        const createFeed = {
-            item: ctx.conversation._id,
-            type: FEED_TYPE.CONVERSATION,
-            users: [initiator._id, recipient._id],
-            lastActionAt: newMessage.createdAt,
-        };
-        
-        const updateFeed = {
-            filter: { item: ctx.conversation._id, type: FEED_TYPE.CONVERSATION },
-            update: { lastActionAt: newMessage.createdAt },
-        };
-        
-        Object.assign(ctx.conversation, updateQuery);
-        
-        await Promise.all([
-            ctx.isNewConversation ? this.feedService.create(createFeed) : this.feedService.updateOne(updateFeed),
-            ctx.conversation.updateOne({ ...updateQuery, $push: { messages: newMessage._id } }),
-        ]);
+        const { _id, type, lastActionAt } = await (ctx.isNewConversation
+        ? this.feedService.create({
+              item: ctx.conversation._id,
+              type: FEED_TYPE.CONVERSATION,
+              users: [initiator._id, recipient._id],
+              lastActionAt: newMessage.createdAt,
+          })
+        : this.feedService.findOneAndUpdate({
+              filter: { item: ctx.conversation._id, type: FEED_TYPE.CONVERSATION },
+              update: { lastActionAt: newMessage.createdAt },
+              options: { returnDocument: 'after' }
+          }));
 
-        const populatedMessage = await newMessage.populate({
-            path: 'sender',
-            model: 'User',
-            select: 'name email official avatar',
-            populate: { path: 'avatar', model: 'File', select: 'url' },
+        const lastMessage = {
+            ...newMessage.toObject<Message>(),
+            sender: {
+                _id: initiator._id,
+                name: initiator.name,
+                email: initiator.email,
+                isOfficial: initiator.isOfficial,
+                avatar: initiator.avatar,
+            },
+        };
+        
+        await ctx.conversation.updateOne({
+            lastMessage: newMessage._id,
+            lastMessageSentAt: newMessage.createdAt,
+            $push: { messages: newMessage._id },
         });
 
-        return { ...ctx, message: populatedMessage, recipient };
+        return { 
+            isNewConversation: ctx.isNewConversation, 
+            feedItem: { _id, type, lastActionAt, item: { _id: ctx.conversation._id, lastMessage, recipient } }, 
+            message: lastMessage 
+        };
     };
 
     reply = async ({ messageId, recipientId, message, initiator }: MessageReplyDTO & { initiator: UserDocument, messageId: string }) => {
@@ -122,16 +128,25 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         const newMessage = await this.create({ sender: initiator._id, text: message.trim(), replyTo: replyMessage._id, refPath: MessageRefPath.USER });
 
         const { 0: populatedMessage } = await Promise.all([
-            newMessage.populate([
-                { path: 'sender', model: 'User', select: 'name email official' },
-                { path: 'replyTo', model: 'Message', select: 'text sender', populate: { path: 'sender', model: 'User', select: 'name' } },
-            ]),
+            newMessage.populate({ path: 'replyTo', model: 'Message', select: 'text sender', populate: { path: 'sender', model: 'User', select: 'name' } }),
             replyMessage.updateOne({ $push: { replies: newMessage._id } }),
             conversation.updateOne({ lastMessage: newMessage._id, lastMessageSentAt: newMessage.createdAt, $push: { messages: newMessage._id } }),
             this.feedService.updateOne({ filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION }, update: { lastActionAt: newMessage.createdAt } })
         ]);
 
-        return { message: populatedMessage, conversationId: conversation._id.toString() };
+        return {
+            message: {
+                ...populatedMessage.toObject(),
+                sender: {
+                    _id: initiator._id,
+                    name: initiator.name,
+                    email: initiator.email,
+                    isOfficial: initiator.isOfficial,
+                    avatar: initiator.avatar,
+                },
+            },
+            conversationId: conversation._id.toString(),
+        };
     }
 
     edit = async ({ messageId, initiatorId, message: newMessage, recipientId }: EditMessageParams) => {
