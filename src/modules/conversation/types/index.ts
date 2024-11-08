@@ -1,11 +1,60 @@
 import { HydratedDocument, Types } from 'mongoose';
 import { Conversation } from '../schemas/conversation.schema';
 import { User } from 'src/modules/user/schemas/user.schema';
+import { Message } from 'src/modules/message/schemas/message.schema';
+import { UserDocument } from 'src/modules/user/types';
+import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
 
 export enum CONVERSATION_HEALTH {
     BLOCKED_BY_INITIATOR = 'BLOCKED_BY_INITIATOR',
     BLOCKED_BY_RECIPIENT = 'BLOCKED_BY_RECIPIENT',
     RECIPIENT_PREMIUM_ONLY = 'RECIPIENT_PREMIUM_ONLY',
+}
+
+export enum CONVERSATION_EVENTS {
+    JOIN = 'conversation.join',
+    LEAVE = 'conversation.leave',
+    MESSAGE_SEND = 'conversation.message.send',
+    MESSAGE_EDIT = 'conversation.message.edit',
+    MESSAGE_DELETE = 'conversation.message.delete',
+    CREATED = 'conversation.created',
+    DELETED = 'conversation.deleted',
+    PRESENCE = 'conversation.user.presence',
+    USER_BLOCK = 'conversation.user.block',
+    USER_UNBLOCK = 'conversation.user.unblock',
+    START_TYPING = 'conversation.start.typing',
+    STOP_TYPING = 'conversation.stop.typing',
+}
+
+export interface ConversationDeleteMessageParams {
+    messageIds: Array<string>;
+    conversationId: string;
+    initiatorId: string;
+    recipientId: string;
+    isLastMessage: boolean;
+    lastMessage: Message;
+    lastMessageSentAt: Date;
+}
+
+export interface ConversationSendMessageParams {
+    initiator: UserDocument;
+    feedItem: FeedWrapper<ConversationFeed>;
+}
+
+export interface ConversationEditMessageParams extends ConversationSendMessageParams {
+    isLastMessage: boolean;
+}
+
+export interface ConversationCreateParams {
+    initiatorId: string;
+    recipientId: string;
+    conversationId: string;
+}
+
+export interface ConversationDeleteParams {
+    initiatorId: string;
+    recipientId: string;
+    conversationId: string;
 }
 
 export interface IConversation {

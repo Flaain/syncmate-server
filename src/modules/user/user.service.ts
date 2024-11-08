@@ -13,6 +13,7 @@ import { BaseService } from 'src/utils/services/base/base.service';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { FileService } from '../file/file.service';
 import { checkErrors } from './constants';
+import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
@@ -77,23 +78,23 @@ export class UserService extends BaseService<UserDocument, User> {
 
         if (user) throw new AppException(checkErrors[parsedQuery.type], HttpStatus.CONFLICT);
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     };
 
     status = async ({ initiator, status }: UserStatusDTO & { initiator: UserDocument }) => {
         const trimmedStatus = status.trim();
 
-        if (initiator.status === trimmedStatus) return { status: HttpStatus.OK, message: 'OK' };
+        if (initiator.status === trimmedStatus) return defaultSuccessResponse;
 
         await initiator.updateOne({ status: trimmedStatus.length ? trimmedStatus : undefined });
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse
     };
 
     name = async ({ initiator, name }: UserNameDto & { initiator: UserDocument }) => {
         await initiator.updateOne({ name });
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     };
 
     changeAvatar = async ({ initiator, file }: { initiator: UserDocument; file: Express.Multer.File }) => {

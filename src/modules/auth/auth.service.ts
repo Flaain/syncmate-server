@@ -17,9 +17,9 @@ import { OtpType } from '../otp/types';
 import { UserDocument } from '../user/types';
 import { User } from '../user/schemas/user.schema';
 import { SessionDocument } from '../session/types';
-import { ForgotDTO } from './dtos/auth.forgot.dto';
 import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
+import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Injectable()
 export class AuthService {
@@ -71,7 +71,7 @@ export class AuthService {
         }
 
         const hashedPassword = await this.bcryptService.hashAsync(password);
-        const { password: _, blockList, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
+        const { password: _, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
         const session = await this.sessionService.create({ userId: restUser._id, userAgent });
 
         return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: restUser._id.toString() }) };
@@ -83,14 +83,6 @@ export class AuthService {
             sessionId: session._id.toString() 
         }),
     });
-
-    forgot = async ({ email }: ForgotDTO) => {
-        if (!await this.userService.findOne({ filter: { email, isDeleted: false } })) {
-            return { retryDelay: 120000 };
-        };
-
-        return this.otpService.createOtp({ email, type: OtpType.PASSWORD_RESET });
-    };
 
     reset = async ({ email, otp, password }: AuthResetDTO) => {
         if (!await this.otpService.findOneAndDelete({ otp, email, type: OtpType.PASSWORD_RESET })) {
@@ -108,7 +100,7 @@ export class AuthService {
 
         await Promise.all([this.sessionService.deleteMany({ userId: user._id }), user.updateOne({ password: hashedPassword })])
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     }
 
     changePassword = async ({ initiator, ...dto }: z.infer<typeof authChangePasswordSchema> & { initiator: UserDocument }) => {
@@ -127,7 +119,7 @@ export class AuthService {
             ]);
         }
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     }
 
     logout = async ({ user, sessionId }: { user: UserDocument; sessionId: string }) => {
@@ -137,7 +129,7 @@ export class AuthService {
 
         await session.deleteOne()
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     }
 
     validate = async (_id: Types.ObjectId | string) => {
@@ -151,8 +143,21 @@ export class AuthService {
         return candidate;
     };
 
+    verifyToken = <T extends object = Record<string, any>>(token: string, type: 'access' | 'refresh') => {
+        try {
+            const data = this.jwtService.verify<T>(token, {
+                secret: this.configService.get(type === 'access' ? JWT_KEYS.ACCESS_TOKEN_SECRET : JWT_KEYS.REFRESH_TOKEN_SECRET),
+            })
+    
+            return data;
+        } catch (error) {
+            console.log(error);
+            throw new AppException({ message: "Error appears while trying verify token" }, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     profile = async (user: UserDocument) => {
-        const { password, blockList, ...rest } = user.toObject();
+        const { password, ...rest } = user.toObject();
 
         return { ...rest };
     };

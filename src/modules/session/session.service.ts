@@ -1,10 +1,9 @@
-import UAParser from 'ua-parser-js';
 import { Model, Types } from 'mongoose';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Session } from './schemas/session.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
-import { AppExceptionCode, Providers } from 'src/utils/types';
+import { AppExceptionCode } from 'src/utils/types';
 import { DropSessionParams, SessionDocument } from './types';
 import { BaseService } from 'src/utils/services/base/base.service';
 
@@ -12,7 +11,6 @@ import { BaseService } from 'src/utils/services/base/base.service';
 export class SessionService extends BaseService<SessionDocument, Session> {
     constructor(
         @InjectModel(Session.name) private readonly sessionModel: Model<SessionDocument>,
-        @Inject(Providers.PARSER_CLIENT) private readonly UAParser: UAParser,
     ) {
         super(sessionModel);
     }
@@ -31,7 +29,7 @@ export class SessionService extends BaseService<SessionDocument, Session> {
     };
 
     getSessions = async ({ userId, sessionId }: { userId: Types.ObjectId | string; sessionId: string }) => {
-        const sessions = await this.find({ filter: { userId }, projection: { userId: 0 } }).lean();
+        const sessions = await this.find({ filter: { userId }, projection: { userId: 0 } });
         const currentSession = sessions.find(({ _id }) => _id.toString() === sessionId);
 
         if (!currentSession) {

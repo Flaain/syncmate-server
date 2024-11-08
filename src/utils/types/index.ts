@@ -1,8 +1,8 @@
-import { Document, FilterQuery, MongooseUpdateQueryOptions, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline } from 'mongoose';
+import { Document, FilterQuery, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline } from 'mongoose';
 import { SessionDocument } from 'src/modules/session/types';
 import { UserDocument } from 'src/modules/user/types';
 
-export type RequestWithUser = Request & { user: { doc: UserDocument; sessionId: string } };
+export type RequestWithUser = Request & { doc: { user: UserDocument; sessionId: string } };
 export type RequestWithSession = Request & { user: { session: SessionDocument } };
 
 export enum THROTTLERS {
@@ -29,7 +29,7 @@ export enum Providers {
     S3_CLIENT = 'S3_CLIENT',
 }
 
-export enum AuthCookiesName {
+export enum Cookies {
     ACCESS_TOKEN = 'accessToken',
     REFRESH_TOKEN = 'refreshToken',
 }

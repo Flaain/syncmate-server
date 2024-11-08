@@ -8,6 +8,7 @@ import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { OtpVerifyDTO } from './dtos/otp.verify.dto';
 import { BaseService } from 'src/utils/services/base/base.service';
+import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Injectable()
 export class OtpService extends BaseService<OtpDocument, OTP> {
@@ -20,9 +21,20 @@ export class OtpService extends BaseService<OtpDocument, OTP> {
     }
 
     createOtp = async ({ email, type }: Pick<OTP, 'email' | 'type'>) => {
-        if (type === OtpType.EMAIL_VERIFICATION && await this.userService.exists({ email })) {
-            throw new AppException({ message: 'Cannot create OTP code' }, HttpStatus.CONFLICT);
-        }
+        const otpCheckHandlers: Record<Exclude<OtpType, 'email_change'>, () => Promise<void | { retryDelay: number }>> = {
+            email_verification: async () => {
+                if (await this.userService.exists({ email })) {
+                    throw new AppException({ message: 'Cannot create OTP code' }, HttpStatus.CONFLICT);
+                }
+            },
+            password_reset: async () => {
+                if (!(await this.userService.exists({ email, isDeleted: false }))) {
+                    return { retryDelay: 120000 };
+                }
+            },
+        }; // rn it looks like overhead but i feel on distance it's a good approach for better scalability
+
+        await otpCheckHandlers[type]()
 
         const otpExists = await this.findOne({ filter: { email, type }, projection: { expiresAt: 1 } });
 
@@ -47,6 +59,6 @@ export class OtpService extends BaseService<OtpDocument, OTP> {
             }, HttpStatus.BAD_REQUEST);
         }
 
-        return { message: 'OK', statusCode: HttpStatus.OK }
+        return defaultSuccessResponse;
     };
 }

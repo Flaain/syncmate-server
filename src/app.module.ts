@@ -13,7 +13,6 @@ import { GroupModule } from './modules/group/group.module';
 import { SessionModule } from './modules/session/session.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { FeedModule } from './modules/feed/feed.module';
-import { UAParserModule } from './utils/services/uaparser/uaparser.module';
 import { BucketModule } from './utils/services/bucket/bucket.module';
 import { APP_GUARD } from '@nestjs/core';
 import { FileModule } from './modules/file/file.module';
@@ -24,7 +23,6 @@ import { FileModule } from './modules/file/file.module';
         AuthModule,
         UserModule,
         FeedModule,
-        UAParserModule.forRoot(),
         BucketModule.forRoot({
             region: process.env.STORAGE_REGION,
             endpoint: process.env.STORAGE_ENDPOINT,
@@ -39,11 +37,11 @@ import { FileModule } from './modules/file/file.module';
         ConversationModule,
         FileModule,
         MessageModule,
-        GatewayModule,
         ParticipantModule,
         GroupModule,
         SessionModule,
         OtpModule,
+        GatewayModule,
     ],
     providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

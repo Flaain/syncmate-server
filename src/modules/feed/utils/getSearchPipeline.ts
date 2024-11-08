@@ -7,7 +7,6 @@ export const getSearchPipeline = ({ initiatorId, query, limit, page }: FeedSearc
             $or: [{ login: { $regex: query, $options: 'i' } }, { name: { $regex: query, $options: 'i' } }],
             _id: { $ne: initiatorId },
             isDeleted: false,
-            isPrivate: false,
         },
     },
     {
@@ -36,12 +35,7 @@ export const getSearchPipeline = ({ initiatorId, query, limit, page }: FeedSearc
         $unionWith: {
             coll: 'groups',
             pipeline: [
-                {
-                    $match: {
-                        $or: [{ login: { $regex: query, $options: 'i' } }, { name: { $regex: query, $options: 'i' } }],
-                        isPrivate: false,
-                    },
-                },
+                { $match: { $or: [{ login: { $regex: query, $options: 'i' } }, { name: { $regex: query, $options: 'i' } }] } },
                 {
                     $lookup: {
                         from: 'files',
