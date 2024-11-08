@@ -4,7 +4,7 @@ import { SigninDTO } from './dtos/auth.signin.dto';
 import { SignupDTO } from './dtos/auth.signup.dto';
 import { AuthService } from './auth.service';
 import { RequestWithSession, RequestWithUser, Routes } from 'src/utils/types';
-import { Body, Controller, Get, HttpStatus, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { CookiesService } from 'src/utils/services/cookies/cookies.service';
 import { AuthChangePasswordType } from './types';
 import { ForgotDTO } from './dtos/auth.forgot.dto';
@@ -14,6 +14,7 @@ import { RefreshGuard } from './guards/auth.refresh.guard';
 import { AccessGuard } from './guards/auth.access.guard';
 import { OtpService } from '../otp/otp.service';
 import { OtpType } from '../otp/types';
+import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Controller(Routes.AUTH)
 export class AuthController {
@@ -47,11 +48,11 @@ export class AuthController {
     @Get('refresh')
     @UseGuards(RefreshGuard)
     async refresh(@Req() req: RequestWithSession, @Res({ passthrough: true }) res: Response) {
-       const { accessToken } = await this.authService.refresh(req.user.session);
+       const { accessToken } = await this.authService.refresh(req.doc.session);
 
        this.cookiesService.setAccessToken(res, accessToken);
 
-       return { message: 'refresh success', status: HttpStatus.OK };
+       return defaultSuccessResponse;
     }
 
     @Post('password')

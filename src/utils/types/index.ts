@@ -3,7 +3,7 @@ import { SessionDocument } from 'src/modules/session/types';
 import { UserDocument } from 'src/modules/user/types';
 
 export type RequestWithUser = Request & { doc: { user: UserDocument; sessionId: string } };
-export type RequestWithSession = Request & { user: { session: SessionDocument } };
+export type RequestWithSession = Request & { doc: { session: SessionDocument } };
 
 export enum THROTTLERS {
     DEFAULT = 'DEFAULT',
