@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CookieOptions, Response } from 'express';
 import { DatesService } from '../dates/dates.service';
-import { AuthCookiesName } from 'src/utils/types';
+import { Cookies } from 'src/utils/types';
 
 export const REFRESH_PATH = '/auth/refresh';
 
@@ -16,15 +16,17 @@ export class CookiesService {
     parseCookies(cookies: string) {
         if (!cookies) return {};
 
-        return Object.fromEntries(cookies.split(';').map((cookie) => {
-            const [key, value] = cookie.split('=');
+        return Object.fromEntries(
+            cookies.split(';').map((cookie) => {
+                const [key, value] = cookie.split('=');
 
-            return [decodeURIComponent(key.trim()), decodeURIComponent(value.trim())];
-        }))
+                return [decodeURIComponent(key.trim()), decodeURIComponent(value.trim())];
+            }),
+        );
     }
 
     setAccessToken(res: Response, accessToken: string) {
-        res.cookie(AuthCookiesName.ACCESS_TOKEN, accessToken, {
+        res.cookie(Cookies.ACCESS_TOKEN, accessToken, {
             ...this.cookieDefault,
             expires: DatesService.fifteenMinutesFromNow(),
         });
@@ -33,7 +35,7 @@ export class CookiesService {
     }
 
     setRefreshToken(res: Response, refreshToken: string) {
-        res.cookie(AuthCookiesName.REFRESH_TOKEN, refreshToken, {
+        res.cookie(Cookies.REFRESH_TOKEN, refreshToken, {
             ...this.cookieDefault,
             expires: DatesService.oneMonthFromNow(),
             path: REFRESH_PATH,
@@ -49,7 +51,7 @@ export class CookiesService {
     }
 
     removeAuthCookies(res: Response) {
-        res.clearCookie(AuthCookiesName.ACCESS_TOKEN).clearCookie(AuthCookiesName.REFRESH_TOKEN, {
+        res.clearCookie(Cookies.ACCESS_TOKEN).clearCookie(Cookies.REFRESH_TOKEN, {
             path: REFRESH_PATH,
         });
 

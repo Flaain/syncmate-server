@@ -12,6 +12,15 @@ export enum FEED_TYPE {
     ADS = 'ADS'
 }
 
+export enum FEED_EVENTS {
+    CREATE = 'feed.create',
+    UPDATE = 'feed.update',
+    DELETE = 'feed.delete',
+    USER_PRESENCE = 'feed.user.presence',
+    START_TYPING = 'feed.start.typing',
+    STOP_TYPING = 'feed.stop.typing'
+}
+
 export interface ConversationFeed extends Pick<ConversationDocument, '_id' | 'lastMessage'> {
     recipient: UserDocument;
 }

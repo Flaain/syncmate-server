@@ -6,19 +6,18 @@ import { PaginationResolver } from 'src/utils/services/pagination/patination.res
 import { AccessGuard } from '../auth/guards/auth.access.guard';
 
 @Controller(Routes.FEED)
+@UseGuards(AccessGuard)
 export class FeedController extends PaginationResolver {
     constructor(private readonly feedService: FeedService) {
         super();
     }
 
     @Get()
-    @UseGuards(AccessGuard)
     getFeed(@Req() req: RequestWithUser, @Query('cursor') cursor?: string) {
         return this.feedService.getFeed({ initiatorId: req.doc.user._id, cursor });
     }
 
     @Get('search')
-    @UseGuards(AccessGuard)
     async search(@Req() req: RequestWithUser, @PaginationDecorator() params: Pagination) {
         return this.feedService.search({ ...params, initiatorId: req.doc.user._id });
     }

@@ -2,10 +2,14 @@ import { Message } from '../schemas/message.schema';
 import { HydratedDocument, Types } from 'mongoose';
 import { MessageSendDTO } from '../dtos/message.send.dto';
 import { MessageDeleteDTO } from '../dtos/message.delete.dto';
-import { MessageEditDTO } from '../dtos/message.edit.dto';
 import { UserDocument } from 'src/modules/user/types';
 
-export enum MessageRefPath {
+export enum MessageSourceRefPath {
+    CONVERSATION = 'Conversation',
+    GROUP = 'Group',
+}
+
+export enum MessageSenderRefPath {
     USER = 'User',
     PARTICIPANT = 'Participant',
 }
@@ -26,5 +30,5 @@ export interface IMessage {
 export type MessageDocument = HydratedDocument<Message>;
 
 export type SendMessageParams = MessageSendDTO & { recipientId: string; initiator: UserDocument };
-export type EditMessageParams = MessageEditDTO & { initiatorId: Types.ObjectId; messageId: string };
+export type EditMessageParams = { message: string; initiatorId: Types.ObjectId; messageId: string };
 export type DeleteMessageParams = MessageDeleteDTO & { initiatorId: Types.ObjectId };

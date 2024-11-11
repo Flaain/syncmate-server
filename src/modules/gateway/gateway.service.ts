@@ -1,14 +1,15 @@
 import { Server } from 'socket.io';
-import { GatewayUtils } from './gateway.utils';
-import { ChangeUserStatusParams, SocketWithUser, USER_EVENTS, FEED_EVENTS } from './types';
+import { ChangeUserStatusParams, SocketWithUser} from './types';
 import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { HttpStatus } from '@nestjs/common';
 import { CookiesService } from 'src/utils/services/cookies/cookies.service';
 import { ConversationService } from '../conversation/conversation.service';
-import { PRESENCE } from '../user/types';
+import { PRESENCE, USER_EVENTS } from '../user/types';
 import { AuthService } from '../auth/auth.service';
 import { CONVERSATION_EVENTS } from '../conversation/types';
+import { FEED_EVENTS } from '../feed/types';
+import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
 
 @WebSocketGateway({ cors: { origin: ['http://localhost:4173', 'http://localhost:5173', 'https://fchat-client.vercel.app'], credentials: true } })
 export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
@@ -64,10 +65,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @SubscribeMessage(USER_EVENTS.PRESENCE)
-    async changeUserStatus(
-        @MessageBody() { presence, lastSeenAt }: ChangeUserStatusParams,
-        @ConnectedSocket() client: SocketWithUser,
-    ) {
+    async changeUserStatus(@MessageBody() { presence, lastSeenAt }: ChangeUserStatusParams, @ConnectedSocket() client: SocketWithUser) {
         if (client.data.user.presence === presence) return;
 
         client.data.user.presence = presence;
@@ -98,7 +96,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
 
             recipientSockets?.forEach((socket) => socket.emit(FEED_EVENTS.USER_PRESENCE, { recipientId: initiatorId.toString(), presence }));
             
-            client.to(GatewayUtils.getRoomIdByParticipants([initiatorId.toString(), recipientId])).emit(CONVERSATION_EVENTS.PRESENCE, { presence, lastSeenAt });
+            client.to(getRoomIdByParticipants([initiatorId.toString(), recipientId])).emit(CONVERSATION_EVENTS.PRESENCE, { presence, lastSeenAt });
         });
     }
 

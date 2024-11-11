@@ -1,8 +1,8 @@
+import { z } from 'zod';
 import { FileTypeValidator, MaxFileSizeValidator, ParseFilePipe } from '@nestjs/common';
 import { emailExistError, loginExistError } from 'src/modules/auth/constants';
 import { IAppException } from 'src/utils/types';
 import { userCheckSchema } from '../schemas/user.check.schema';
-import { z } from 'zod';
 
 export const MAX_IMAGE_SIZE = 5 * 1024 ** 2;
 export const validImageTypes = ['image/png', 'image/jpeg', 'image/jpg'];

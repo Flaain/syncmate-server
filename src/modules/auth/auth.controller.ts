@@ -26,7 +26,11 @@ export class AuthController {
 
     @Post('signup')
     async signup(@Body() dto: Required<SignupDTO>, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-        const { user, accessToken, refreshToken } = await this.authService.signup({ ...dto, userAgent: req.headers['user-agent'] });
+        const { user, accessToken, refreshToken } = await this.authService.signup({ 
+            ...dto, 
+            userAgent: req.headers['user-agent'],
+            userIP: (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress 
+        });
 
         this.cookiesService.setAuthCookies({ res, accessToken, refreshToken });
 
@@ -38,6 +42,7 @@ export class AuthController {
         const { user, accessToken, refreshToken } = await this.authService.signin({
             ...dto,
             userAgent: req.headers['user-agent'],
+            userIP: (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress
         });
 
         this.cookiesService.setAuthCookies({ res, accessToken, refreshToken });

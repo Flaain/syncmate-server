@@ -10,6 +10,10 @@ export enum PRESENCE {
     OFFLINE = 'offline'
 }
 
+export enum USER_EVENTS {
+    PRESENCE = 'user.presence'
+}
+
 export type CheckType = 'email' | 'login';
 
 export type UserDocument = HydratedDocument<User>;

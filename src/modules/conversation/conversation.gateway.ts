@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Socket } from "socket.io";
 import { GatewayService } from "../gateway/gateway.service";
-import { FEED_EVENTS, SocketWithUser } from "../gateway/types";
+import { SocketWithUser } from "../gateway/types";
 import { ConnectedSocket, MessageBody, SubscribeMessage } from "@nestjs/websockets";
 import { OnEvent } from "@nestjs/event-emitter";
 import { UserService } from "../user/user.service";
@@ -16,6 +16,7 @@ import {
 } from "./types";
 import { toRecipient } from "./utils/toRecipient";
 import { getRoomIdByParticipants } from "src/utils/helpers/getRoomIdByParticipants";
+import { FEED_EVENTS } from "../feed/types";
 
 @Injectable()
 export class ConversationGateway {
@@ -28,12 +29,11 @@ export class ConversationGateway {
     @SubscribeMessage(CONVERSATION_EVENTS.JOIN)
     async handleJoinConversation(@MessageBody() { recipientId }: { recipientId: string }, @ConnectedSocket() client: Socket) {
         try {
-            const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
-            const recipient = await this.userService.findOne({ filter: { _id: recipientId } });
+            const recipient = await this.userService.findById(recipientId);
 
             if (!recipient) throw new Error('recipient not found');
 
-            client.join(roomId);
+            client.join(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
         } catch (error) {
             // client.emit(`error`, { error: error.message });
         }
@@ -52,57 +52,40 @@ export class ConversationGateway {
 
         this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
         this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.STOP_TYPING);
-
-        this.gatewayService.sockets.get(initiatorId).concat(this.gatewayService.sockets.get(recipientId)).forEach((socket) => {
-            socket.emit(FEED_EVENTS.CREATE, { 
-                ...feedItem, 
-                item: { 
-                    ...feedItem.item,
-                    recipient: socket.data.user._id.toString() === initiatorId ? feedItem.item.recipient : toRecipient(initiator.toObject())
-                } 
-            });
-
-            socket.data.user._id.toString() === recipientId && socket.emit(FEED_EVENTS.STOP_TYPING, {
-                _id: feedItem._id,
-                participant: { _id: initiatorId },
-            });
+        
+        [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)].forEach((sockets) => {
+            sockets?.forEach((socket) => {
+                socket.emit(FEED_EVENTS.CREATE, { 
+                    ...feedItem, 
+                    item: { 
+                        ...feedItem.item,
+                        recipient: socket.data.user._id.toString() === initiatorId ? feedItem.item.recipient : toRecipient(initiator.toObject())
+                    } 
+                });
+    
+                socket.data.user._id.toString() === recipientId && socket.emit(FEED_EVENTS.STOP_TYPING, {
+                    _id: feedItem._id,
+                    participant: { _id: initiatorId },
+                });
+            })
         })
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_EDIT)
-    onEditMessage({ message, recipientId, conversationId, initiatorId, isLastMessage }: ConversationEditMessageParams) {
-        const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
-
-        const initiatorSockets = this.gatewayService.sockets.get(initiatorId);
-        const recipientSockets = this.gatewayService.sockets.get(recipientId);
-
-        this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
-
-        isLastMessage && [initiatorSockets, recipientSockets].forEach((sockets) => sockets?.forEach((socket) => socket.emit(FEED_EVENTS.EDIT_MESSAGE, {
-            message,
-            id: conversationId,
-        })));
+    onEditMessage({ isLastMessage, conversationId, initiatorId, message, recipientId }: ConversationEditMessageParams) {
+        this.gatewayService.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
+        
+        isLastMessage && [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)].forEach((sockets) => {
+            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage: message }));
+        })
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_DELETE)
-    handleDeleteMessage({
-        initiatorId,
-        recipientId,
-        conversationId,
-        messageIds,
-        lastMessage,
-        lastMessageSentAt,
-        isLastMessage
-    }: ConversationDeleteMessageParams) {
-        const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
-
-        const initiatorSockets = this.gatewayService.sockets.get(initiatorId);
-        const recipientSockets = this.gatewayService.sockets.get(recipientId);
-
-        this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_DELETE, messageIds);
-
-        isLastMessage && [initiatorSockets, recipientSockets].forEach((sockets) => {
-            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.DELETE_MESSAGE, { id: conversationId, lastMessage, lastMessageSentAt }));
+    handleDeleteMessage({ initiatorId, recipientId, conversationId, messageIds, lastMessage, lastMessageSentAt, isLastMessage }: ConversationDeleteMessageParams) {
+        this.gatewayService.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_DELETE, messageIds);
+        
+        isLastMessage && [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)].forEach((sockets) => {
+            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage, lastActionAt: lastMessageSentAt }));
         });
     }
 
@@ -113,30 +96,21 @@ export class ConversationGateway {
 
     @OnEvent(CONVERSATION_EVENTS.DELETED)
     onConversationDeleted({ initiatorId, recipientId, conversationId }: ConversationDeleteParams) {
-        const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
+        this.gatewayService.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.DELETED);
 
-        this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.DELETED);
-
-        const initiatorSockets = this.gatewayService.sockets.get(initiatorId);
-        const recipientSockets = this.gatewayService.sockets.get(recipientId);
-
-        [initiatorSockets, recipientSockets].forEach((sockets) => {
-            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.DELETE, conversationId));
+        [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)].forEach((sockets) => {
+            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.DELETE, conversationId)); 
         });
     }
 
     @OnEvent(CONVERSATION_EVENTS.USER_BLOCK)
-    onBlock({ initiatorId, recipientId }: Pick<ConversationSendMessageParams, 'initiatorId' | 'recipientId'>) {
-        const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
-
-        this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.USER_BLOCK, recipientId);
+    onBlock({ initiatorId, recipientId }: { initiatorId: string; recipientId: string }) {
+        this.gatewayService.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.USER_BLOCK, recipientId);
     }
 
     @OnEvent(CONVERSATION_EVENTS.USER_UNBLOCK)
-    onUnblock({ initiatorId, recipientId }: Pick<ConversationSendMessageParams, 'initiatorId' | 'recipientId'>) {
-        const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
-
-        this.gatewayService.server.to(roomId).emit(CONVERSATION_EVENTS.USER_UNBLOCK, recipientId);
+    onUnblock({ initiatorId, recipientId }: { initiatorId: string; recipientId: string }) {
+        this.gatewayService.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.USER_UNBLOCK, recipientId);
     }
 
     @SubscribeMessage(CONVERSATION_EVENTS.START_TYPING)
@@ -144,20 +118,13 @@ export class ConversationGateway {
         @MessageBody() { conversationId, recipientId }: { conversationId: string; recipientId: string }, 
         @ConnectedSocket() client: SocketWithUser
     ) {
-        const conversation = await this.conversationService.exists({ 
-            _id: conversationId, 
-            participants: { $all: [client.data.user._id, recipientId] } 
-        });
-
-        if (!conversation) return;
+        if (!await this.conversationService.exists({ _id: conversationId, participants: { $all: [client.data.user._id, recipientId] }})) return;
 
         const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
 
         client.to(roomId).emit(CONVERSATION_EVENTS.START_TYPING);
 
-        const recipientSockets = this.gatewayService.sockets.get(recipientId);
-
-        recipientSockets?.forEach((socket) => {
+        this.gatewayService.sockets.get(recipientId)?.forEach((socket) => {
             !socket.rooms.has(roomId) && socket.emit(FEED_EVENTS.START_TYPING, {
                 _id: conversationId,
                 participant: {

@@ -14,11 +14,13 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { FileService } from '../file/file.service';
 import { checkErrors } from './constants';
 import { defaultSuccessResponse } from 'src/utils/constants';
+import { BlockList } from './schemas/user.blocklist.schema';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
     constructor(
-        @InjectModel(User.name) private readonly userModel: Model<UserDocument>, 
+        @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+        @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
         @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
         private readonly fileService: FileService
     ) {
@@ -26,7 +28,7 @@ export class UserService extends BaseService<UserDocument, User> {
     }
 
     block = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
-        if (!isValidObjectId(recipientId) || initiator._id.toString() === recipientId || initiator.blockList.some((id) => id.toString() === recipientId)) {
+        if (initiator._id.toString() === recipientId || await this.blocklistModel.exists({ user: initiator._id, blockList: { $in: [recipientId] } })) {
             throw new AppException({ message: 'Cannot block user' }, HttpStatus.BAD_REQUEST);
         }
 
@@ -34,13 +36,13 @@ export class UserService extends BaseService<UserDocument, User> {
 
         if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
 
-        await this.updateOne({ filter: { _id: initiator._id }, update: { $addToSet: { blockList: recipient._id } } });
+        await this.blocklistModel.findOneAndUpdate({ user: initiator._id }, { $push: { blockList: recipient._id } }, { upsert: true });
 
         return { recipientId: recipient._id.toString() };
     }
 
     unblock = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
-        if (!isValidObjectId(recipientId) || initiator._id.toString() === recipientId || !initiator.blockList.some((id) => id.toString() === recipientId)) {
+        if (initiator._id.toString() === recipientId || !await this.blocklistModel.exists({ user: initiator._id, blockList: { $in: [recipientId] } })) {
             throw new AppException({ message: 'Cannot unblock user' }, HttpStatus.BAD_REQUEST);
         }
 
@@ -48,7 +50,7 @@ export class UserService extends BaseService<UserDocument, User> {
 
         if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
 
-        await this.updateOne({ filter: { _id: initiator._id }, update: { $pull: { blockList: recipient._id } } });
+        await this.blocklistModel.findOneAndUpdate({ user: initiator._id }, { $pull: { blockList: recipient._id } });
 
         return { recipientId: recipient._id.toString() };
     }

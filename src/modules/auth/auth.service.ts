@@ -43,7 +43,7 @@ export class AuthService {
         return { accessToken, refreshToken };
     }
 
-    signin = async ({ login, password, userAgent }: WithUserAgent<SigninDTO>) => {
+    signin = async ({ login, password, userAgent, userIP }: WithUserAgent<SigninDTO>) => {
         const user = await this.userService.findOne({ filter: { isDeleted: false, $or: [{ email: login }, { login }] }, projection: { blockList: 0 } });
 
         if (!user || !(await this.bcryptService.compareAsync(password, user.password))) {
@@ -54,12 +54,12 @@ export class AuthService {
 
         const { password: _,  ...rest } = populatedUser.toObject<User>();
 
-        const session = await this.sessionService.create({ userId: user._id, userAgent });
+        const session = await this.sessionService.create({ userId: user._id, userAgent, userIP });
         
         return { user: { ...rest, avatar: rest.avatar }, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
     }
 
-    signup = async ({ password, otp, userAgent, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     
+    signup = async ({ password, otp, userAgent, userIP, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     
         if (await this.userService.findOne({ filter: { $or: [{ email: dto.email }, { login: dto.login }] } })) {
             throw new AppException({ 
                 message: 'An error occurred during the registration process. Please try again.'
@@ -72,7 +72,7 @@ export class AuthService {
 
         const hashedPassword = await this.bcryptService.hashAsync(password);
         const { password: _, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
-        const session = await this.sessionService.create({ userId: restUser._id, userAgent });
+        const session = await this.sessionService.create({ userId: restUser._id, userAgent, userIP });
 
         return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: restUser._id.toString() }) };
     };

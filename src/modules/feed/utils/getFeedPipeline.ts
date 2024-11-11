@@ -60,8 +60,8 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
             ],
         },
     },
-    { $lookup: { from: 'groups', localField: 'item', foreignField: '_id', as: '#' } },
-    { $lookup: { from: 'groups', localField: 'item', foreignField: '_id', as: '#' } },
+    // { $lookup: { from: 'groups', localField: 'item', foreignField: '_id', as: '#' } },
+    // { $lookup: { from: 'clouds', localField: 'item', foreignField: '_id', as: '#' } },
     {
         $set: {
             item: {

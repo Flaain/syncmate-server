@@ -21,6 +21,7 @@ import { FileModule } from './modules/file/file.module';
     imports: [
         ConfigModule.forRoot({ isGlobal: true, expandVariables: true }),
         AuthModule,
+        SessionModule,
         UserModule,
         FeedModule,
         BucketModule.forRoot({
@@ -39,7 +40,6 @@ import { FileModule } from './modules/file/file.module';
         MessageModule,
         ParticipantModule,
         GroupModule,
-        SessionModule,
         OtpModule,
         GatewayModule,
     ],

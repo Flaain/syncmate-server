@@ -5,12 +5,6 @@ import { Message } from 'src/modules/message/schemas/message.schema';
 import { UserDocument } from 'src/modules/user/types';
 import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
 
-export enum CONVERSATION_HEALTH {
-    BLOCKED_BY_INITIATOR = 'BLOCKED_BY_INITIATOR',
-    BLOCKED_BY_RECIPIENT = 'BLOCKED_BY_RECIPIENT',
-    RECIPIENT_PREMIUM_ONLY = 'RECIPIENT_PREMIUM_ONLY',
-}
-
 export enum CONVERSATION_EVENTS {
     JOIN = 'conversation.join',
     LEAVE = 'conversation.leave',
@@ -41,8 +35,12 @@ export interface ConversationSendMessageParams {
     feedItem: FeedWrapper<ConversationFeed>;
 }
 
-export interface ConversationEditMessageParams extends ConversationSendMessageParams {
+export interface ConversationEditMessageParams {
+    message: Message;
     isLastMessage: boolean;
+    conversationId: string;
+    recipientId: string;
+    initiatorId: string;
 }
 
 export interface ConversationCreateParams {
@@ -65,7 +63,7 @@ export interface IConversation {
     messages?: Array<Types.ObjectId>;
 }
 
-export type ConversationDocument = HydratedDocument<Conversation>
+export type ConversationDocument = HydratedDocument<Conversation>;
 
 export interface GetConversationReturn {
     conversation: {

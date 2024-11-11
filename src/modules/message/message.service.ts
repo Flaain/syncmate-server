@@ -1,8 +1,8 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Message } from './schemas/message.schema';
-import { Model, Types, isValidObjectId } from 'mongoose';
-import { DeleteMessageParams, EditMessageParams, MessageDocument, MessageRefPath, SendMessageParams } from './types';
+import { Model, Types } from 'mongoose';
+import { DeleteMessageParams, EditMessageParams, MessageDocument, MessageSenderRefPath, MessageSourceRefPath, SendMessageParams } from './types';
 import { ConversationService } from '../conversation/conversation.service';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BaseService } from 'src/utils/services/base/base.service';
@@ -18,8 +18,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
     constructor(
         @InjectModel(Message.name) private readonly messageModel: Model<MessageDocument>,
         @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
+        @Inject(forwardRef(() => ConversationService)) private readonly conversationService: ConversationService,
         private readonly userService: UserService,
-        private readonly conversationService: ConversationService,
         private readonly feedService: FeedService
     ) {
         super(messageModel);
@@ -61,7 +61,13 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             ctx.conversation = await this.conversationService.create({ participants: [recipient._id, initiator._id] });
         };
 
-        const newMessage = await this.create({ sender: initiator._id, text: message.trim(), refPath: MessageRefPath.USER });
+        const newMessage = await this.create({ 
+            sender: initiator._id, 
+            senderRefPath: MessageSenderRefPath.USER,
+            text: message.trim(),
+            source: ctx.conversation._id,
+            sourceRefPath: MessageSourceRefPath.CONVERSATION,
+        });
 
         const { _id, type, lastActionAt } = await (ctx.isNewConversation
         ? this.feedService.create({
@@ -107,10 +113,12 @@ export class MessageService extends BaseService<MessageDocument, Message> {
     };
 
     reply = async ({ messageId, recipientId, message, initiator }: MessageReplyDTO & { initiator: UserDocument, messageId: string }) => {
-        if (!isValidObjectId(messageId)) throw new AppException({ message: 'Invalid message id' }, HttpStatus.BAD_REQUEST);
-
         await this.isMessagingRestricted({ recipientId, initiator });
+        
+        const recipient = await this.userService.findOne({ filter: { _id: recipientId, isDeleted: false }, projection: { _id: 1 } });
 
+        if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
+        
         const replyMessage = await this.findById(messageId);
 
         if (!replyMessage) throw new AppException({ message: 'Cannot reply to a message that does not exist' }, HttpStatus.NOT_FOUND);
@@ -122,49 +130,67 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         if (!conversation) throw new AppException({ message: 'Conversation not found' }, HttpStatus.NOT_FOUND);
 
-        const newMessage = await this.create({ sender: initiator._id, text: message.trim(), replyTo: replyMessage._id, refPath: MessageRefPath.USER });
+        const newMessage = await this.create({ 
+            sender: initiator._id, 
+            senderRefPath: MessageSenderRefPath.USER,
+            text: message.trim(), 
+            replyTo: replyMessage._id,
+            source: conversation._id,
+            sourceRefPath: MessageSourceRefPath.CONVERSATION
+        });
 
-        const { 0: populatedMessage } = await Promise.all([
-            newMessage.populate({ path: 'replyTo', model: 'Message', select: 'text sender', populate: { path: 'sender', model: 'User', select: 'name' } }),
+        const { _id, type, lastActionAt } = await this.feedService.findOneAndUpdate({ 
+            filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION }, 
+            update: { lastActionAt: newMessage.createdAt },
+            options: { returnDocument: 'after' } 
+        });
+
+        await Promise.all([
             replyMessage.updateOne({ $push: { replies: newMessage._id } }),
-            conversation.updateOne({ lastMessage: newMessage._id, lastMessageSentAt: newMessage.createdAt, $push: { messages: newMessage._id } }),
-            this.feedService.updateOne({ filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION }, update: { lastActionAt: newMessage.createdAt } })
+            conversation.updateOne({ lastMessage: newMessage._id, lastMessageSentAt: newMessage.createdAt, $push: { messages: newMessage._id } })
         ]);
 
         return {
-            message: {
-                ...populatedMessage.toObject(),
-                sender: {
-                    _id: initiator._id,
-                    name: initiator.name,
-                    email: initiator.email,
-                    isOfficial: initiator.isOfficial,
-                    avatar: initiator.avatar,
+            feedItem: {
+                _id,
+                type,
+                lastActionAt,
+                item: {
+                    _id: conversation._id,
+                    lastMessage: {
+                        ...newMessage.toObject<Message>(),
+                        sender: {
+                            _id: initiator._id,
+                            name: initiator.name,
+                            email: initiator.email,
+                            isOfficial: initiator.isOfficial,
+                            avatar: initiator.avatar,
+                        },
+                    },
+                    recipient,
                 },
             },
-            conversationId: conversation._id.toString(),
         };
     }
 
-    edit = async ({ messageId, initiatorId, message: newMessage, recipientId }: EditMessageParams) => {
-        const conversation = await this.conversationService.findOne({
-            filter: {
-                participants: { $all: [initiatorId, new Types.ObjectId(recipientId)] },
-                messages: { $in: new Types.ObjectId(messageId) },
-            },
-            projection: { _id: 1, lastMessage: 1 },
-        });
-
-        if (!conversation) throw new AppException({ message: "Forbidden" }, HttpStatus.FORBIDDEN);
-
-        const message = await this.findOneAndUpdate({
+    edit = async ({ messageId, initiatorId, message: newMessage }: EditMessageParams) => {
+        const message: any = await this.findOneAndUpdate({
             filter: { _id: messageId, sender: initiatorId, text: { $ne: newMessage.trim() } },
             update: { text: newMessage.trim(), hasBeenEdited: true },
             options: {
-                new: true,
+                returnDocument: 'after',
                 runValidators: true,
                 populate: [
-                    { path: 'sender', model: 'User', select: 'name email avatar', populate: { path: 'avatar', model: 'File', select: 'url' } },
+                    {
+                        path: 'source',
+                        select: '_id lastMessage participants',
+                        populate: {
+                            path: 'participants',
+                            model: 'User',
+                            select: '_id',
+                            match: { _id: { $ne: initiatorId } },
+                        },
+                    },
                     {
                         path: 'replyTo',
                         model: 'Message',
@@ -177,10 +203,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         if (!message) throw new AppException({ message: "Forbidden" }, HttpStatus.FORBIDDEN);
 
-        return { 
-            message: message.toObject(), 
-            conversationId: conversation._id.toString(), 
-            isLastMessage: message._id.toString() === conversation.lastMessage._id.toString()
+        return {
+            message: message.toObject(),  
+            isLastMessage: message._id.toString() === message.lastMessage._id.toString(),
+            conversationId: message.source._id.toString(),
+            recipientId: message.participants[0]._id.toString()
         };
     };
 
@@ -198,7 +225,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             },
             update: { $pull: { messages: { $in: findedMessageIds } } },
             options: {
-                new: true,
+                returnDocument: 'after',
                 projection: {
                     _id: 1,
                     lastMessage: 1,
@@ -230,10 +257,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         await Promise.all([
             isLastMessage && conversation.updateOne({ lastMessage, lastMessageSentAt }),
             this.deleteMany({ _id: { $in: findedMessageIds }, sender: initiatorId }),
-            this.feedService.updateOne({
-                filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION },
-                update: { lastActionAt: lastMessageSentAt },
-            }),
+            this.feedService.updateOne({ filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION }, update: { lastActionAt: lastMessageSentAt } }),
         ]);
 
         return {

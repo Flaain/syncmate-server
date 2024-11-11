@@ -5,5 +5,5 @@ export type WithAuthTokens<T, K extends string> = {
     refreshToken: string;
 };
 
-export type WithUserAgent<T> = T & { userAgent?: string };
+export type WithUserAgent<T> = T & { userAgent?: string; userIP?: string };
 export type AuthChangePasswordType = 'set' | 'check';
