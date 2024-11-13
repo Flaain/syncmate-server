@@ -29,6 +29,6 @@ export class RefreshGuard implements CanActivate {
             return req.cookies[Cookies.REFRESH_TOKEN];
         }
 
-        throw new AppException({ message: 'Unauthorized', errorCode: AppExceptionCode.MISSING_ACCESS_TOKEN }, HttpStatus.UNAUTHORIZED);
+        throw new AppException({ message: 'Unauthorized', errorCode: AppExceptionCode.MISSING_REFRESH_TOKEN }, HttpStatus.UNAUTHORIZED);
     };
 }

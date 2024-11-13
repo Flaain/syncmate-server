@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { Types } from 'mongoose';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { WithUserAgent } from './types';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JWT_KEYS } from 'src/utils/types';
 import { AppException } from 'src/utils/exceptions/app.exception';
@@ -152,7 +152,10 @@ export class AuthService {
             return data;
         } catch (error) {
             console.log(error);
-            throw new AppException({ message: "Error appears while trying verify token" }, HttpStatus.INTERNAL_SERVER_ERROR);
+            const isTokenExpiredError = error instanceof TokenExpiredError;
+            throw new AppException({ 
+                message: isTokenExpiredError ? error.message : 'Error appearce while trying to verify token' 
+            }, isTokenExpiredError ? HttpStatus.UNAUTHORIZED : HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

@@ -11,16 +11,15 @@ export class AccessGuard implements CanActivate {
     canActivate = async (context: ExecutionContext) => {
         const request = context.switchToHttp().getRequest<Request>();
         const token = this.extractTokenFromCookies(request);
-        
         const { userId, sessionId } = this.authService.verifyToken<{ userId: string, sessionId: string }>(token, 'access');
         
         const user = await this.authService.validate(userId);
-
+        
         request['doc'] = { user, sessionId };
-
+        
         return true;
     };
-
+    
     private extractTokenFromCookies = (req: Request): string => {
         if (Cookies.ACCESS_TOKEN in req.cookies) {
             return req.cookies[Cookies.ACCESS_TOKEN];
