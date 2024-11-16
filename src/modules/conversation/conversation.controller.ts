@@ -4,6 +4,7 @@ import { RequestWithUser, Routes } from 'src/utils/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AccessGuard } from '../auth/guards/auth.access.guard';
 import { CONVERSATION_EVENTS } from './types';
+import { paramPipe } from 'src/utils/constants';
 
 @Controller(Routes.CONVERSATION)
 @UseGuards(AccessGuard)
@@ -14,7 +15,7 @@ export class ConversationController {
     ) {}
 
     @Delete('delete/:id')
-    async delete(@Req() req: RequestWithUser, @Param('id') id: string) {
+    async delete(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {
         const { _id, recipientId } = await this.conversationService.deleteConversation({ initiatorId: req.doc.user._id, recipientId: id });
         
         this.eventEmitter.emit(CONVERSATION_EVENTS.DELETED, { 
@@ -27,12 +28,12 @@ export class ConversationController {
     }
 
     @Get(':id')
-    getConversation(@Req() req: RequestWithUser, @Param('id') id: string) {
+    getConversation(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {
         return this.conversationService.getConversation({ initiator: req.doc.user, recipientId: id });
     }
 
     @Get("previous-messages/:id")
-    getPreviousMessages(@Req() req: RequestWithUser, @Param('id') id: string, @Query('cursor') cursor: string) {
+    getPreviousMessages(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string, @Query('cursor', paramPipe) cursor: string) {
         return this.conversationService.getPreviousMessages({ recipientId: id, cursor, initiator: req.doc.user })
     }
 }

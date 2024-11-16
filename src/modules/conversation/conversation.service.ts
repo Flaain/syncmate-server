@@ -47,105 +47,149 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
     };
     
     getConversation = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
-        const recipient = await this.userService.findOne({
-            filter: { _id: recipientId },
-            projection: { birthDate: 0, password: 0, isPrivate: 0 },
-            options: {
-                populate: [
-                    {
-                        path: 'avatar',
-                        model: 'File',
-                        select: 'url',
-                    },
-                ],
-            },
-        });
-
-        if (!recipient) throw new AppException({ message: "User not found" }, HttpStatus.NOT_FOUND);
-
         let nextCursor: string | null = null;
 
-        const conversation = await this.findOne({
-            filter: { participants: { $all: [initiator._id, recipient._id] } },
-            projection: { messages: 1 },
-            options: {
-                populate: [
-                    {
-                        path: 'messages',
-                        model: 'Message',
-                        populate: [
-                            {
-                                path: 'sender',
-                                model: 'User',
-                                select: 'name isDeleted avatar',
-                                populate: { path: 'avatar', model: 'File', select: 'url' },
-                            },
-                            {
-                                path: 'replyTo',
-                                model: 'Message',
-                                select: 'text sender',
-                                populate: { path: 'sender', model: 'User', select: 'name' },
-                            },
-                        ],
-                        options: {
-                            limit: MESSAGES_BATCH,
-                            sort: { createdAt: -1 },
-                        },
-                    },
-                ],
-            },
-        });
+        const recipient = (await this.userService.aggregate([
+            { $match: { _id: new Types.ObjectId(recipientId) } },
+            { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
+            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+            { $project: { login: 1, name: 1, isDeleted: 1, isPrivate: 1, isOfficial: 1, lastSeenAt: 1, avatar: 1, presence: 1 } },
+        ]))[0];
 
-        if (!conversation && recipient.isPrivate) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
+        if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
+
+        const conversation = (await this.aggregate([
+            { $match: { participants: { $all: [initiator._id, recipient._id] } } },
+            {
+                $lookup: {
+                    from: 'messages',
+                    localField: 'messages',
+                    foreignField: '_id',
+                    as: 'messages',
+                    pipeline: [
+                        { $sort: { createdAt: -1 } },
+                        { $limit: MESSAGES_BATCH },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'sender',
+                                foreignField: '_id',
+                                as: 'sender',
+                                pipeline: [
+                                    { $project: { name: 1, isDeleted: 1, avatar: 1 } },
+                                    {
+                                        $lookup: {
+                                            from: 'files',
+                                            localField: 'avatar',
+                                            foreignField: '_id',
+                                            as: 'avatar',
+                                            pipeline: [{ $project: { url: 1 } }],
+                                        },
+                                    },
+                                    { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+                                ],
+                            },
+                        },
+                        {
+                            $lookup: {
+                                from: 'messages',
+                                localField: 'replyTo',
+                                foreignField: '_id',
+                                as: 'replyTo',
+                                pipeline: [
+                                    {
+                                        $lookup: {
+                                            from: 'users',
+                                            localField: 'sender',
+                                            foreignField: '_id',
+                                            as: 'sender',
+                                            pipeline: [{ $project: { name: 1 } }],
+                                        },
+                                    },
+                                    { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
+                                    { $project: { text: 1, sender: 1 } }
+                                ],
+                            },
+                        },
+                        { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
+                        { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
+                        { $project: { source: 0, sourceRefPath: 0 } },
+                    ],
+                },
+            },
+            { $project: { messages: 1 } },
+        ]))[0];
 
         conversation?.messages.length === MESSAGES_BATCH && (nextCursor = conversation?.messages[MESSAGES_BATCH - 1]._id.toString());
+        conversation?.messages.reverse();
 
-        return {
-            conversation: {
-                _id: conversation?._id, 
-                recipient, 
-                messages: conversation?.messages.reverse() ?? [],
-            },
-            nextCursor,
-        };
+        return { conversation: { ...(conversation || {}), recipient }, nextCursor };
     };
 
-    getPreviousMessages = async ({ cursor, initiator, recipientId }: { cursor: string, initiator: UserDocument, recipientId: string }) => {
-        if (!isValidObjectId(cursor) || !isValidObjectId(recipientId)) throw new AppException({ message: "Invlaid object id" }, HttpStatus.BAD_REQUEST);
-        
+    getPreviousMessages = async ({ cursor, initiator, recipientId }: { cursor: string, initiator: UserDocument, recipientId: string }) => {        
         let nextCursor: string | null = null;
 
-        const conversation = await this.findOne({
-            filter: { participants: { $all: [initiator._id, new Types.ObjectId(recipientId)] } },
-            projection: { messages: 1 },
-            options: {
-                populate: [
-                    {
-                        path: 'messages',
-                        model: 'Message',
-                        populate: [
-                            {
-                                path: 'sender',
-                                model: 'User',
-                                select: 'name isDeleted avatar',
-                                populate: { path: 'avatar', model: 'File', select: 'url' },
+        const conversation = (await this.aggregate([
+            { $match: { participants: { $all: [initiator._id, new Types.ObjectId(recipientId)] } } },
+            {
+                $lookup: {
+                    from: 'messages',
+                    localField: 'messages',
+                    foreignField: '_id',
+                    as: 'messages',
+                    pipeline: [
+                        { $match: { _id: { $lt: new Types.ObjectId(cursor) } } },
+                        { $sort: { createdAt: -1 } },
+                        { $limit: MESSAGES_BATCH },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'sender',
+                                foreignField: '_id',
+                                as: 'sender',
+                                pipeline: [
+                                    { $project: { name: 1, isDeleted: 1, avatar: 1 } },
+                                    {
+                                        $lookup: {
+                                            from: 'files',
+                                            localField: 'avatar',
+                                            foreignField: '_id',
+                                            as: 'avatar',
+                                            pipeline: [{ $project: { url: 1 } }],
+                                        },
+                                    },
+                                    { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+                                ],
                             },
-                            {
-                                path: 'replyTo',
-                                model: 'Message',
-                                select: 'text sender',
-                                populate: { path: 'sender', model: 'User', select: 'name' },
-                            },
-                        ],
-                        options: {
-                            limit: MESSAGES_BATCH,
-                            sort: { createdAt: -1 },
                         },
-                        match: { _id: { $lt: cursor } },
-                    },
-                ],
+                        {
+                            $lookup: {
+                                from: 'messages',
+                                localField: 'replyTo',
+                                foreignField: '_id',
+                                as: 'replyTo',
+                                pipeline: [
+                                    { $project: { text: 1, sender: 1 } },
+                                    {
+                                        $lookup: {
+                                            from: 'users',
+                                            localField: 'sender',
+                                            foreignField: '_id',
+                                            as: 'sender',
+                                            pipeline: [{ $project: { name: 1 } }],
+                                        },
+                                    },
+                                    { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
+                                ],
+                            },
+                        },
+                        { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
+                        { $project: { source: 0, sourceRefPath: 0 } },
+                    ],
+                },
             },
-        });
+            { $project: { messages: 1 } },
+        ]))[0];
 
         if (!conversation) throw new AppException({ message: "Cannot get previous messages" }, HttpStatus.NOT_FOUND);
 
