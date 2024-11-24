@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, isValidObjectId } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Conversation } from './schemas/conversation.schema';
 import { ConversationDocument } from './types';
 import { AppException } from 'src/utils/exceptions/app.exception';
@@ -12,6 +12,7 @@ import { Providers } from 'src/utils/types';
 import { S3Client } from '@aws-sdk/client-s3';
 import { FeedService } from '../feed/feed.service';
 import { MessageService } from '../message/message.service';
+import { BlockList } from '../user/schemas/user.blocklist.schema';
 
 @Injectable()
 export class ConversationService extends BaseService<ConversationDocument, Conversation> {
@@ -19,6 +20,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
         @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
         @Inject(forwardRef(() => MessageService)) private readonly messageService: MessageService,
+        @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
         private readonly feedService: FeedService,
         private readonly userService: UserService,
     ) {
@@ -48,7 +50,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
     
     getConversation = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
         let nextCursor: string | null = null;
-
+        
         const recipient = (await this.userService.aggregate([
             { $match: { _id: new Types.ObjectId(recipientId) } },
             { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
@@ -58,6 +60,27 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
 
         if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
 
+        const { 0: { isInitiatorBlocked, isRecipientBlocked } } = await this.blocklistModel.aggregate([
+            {
+                $facet: {
+                    isInitiatorBlocked: [
+                        { $match: { user: recipient._id, $expr: { $in: [initiator._id, '$blocklist'] } } },
+                        { $project: { isBlocked: { $literal: true } } },
+                    ],
+                    isRecipientBlocked: [
+                        { $match: { user: initiator._id, $expr: { $in: [recipient._id, '$blocklist'] } } },
+                        { $project: { isBlocked: { $literal: true } } }
+                    ],
+                },
+            },
+            { 
+                $project: { 
+                    isInitiatorBlocked: { $first: '$isInitiatorBlocked.isBlocked' }, 
+                    isRecipientBlocked: { $first: '$isRecipientBlocked.isBlocked' } 
+                } 
+            },
+        ]);
+        
         const conversation = (await this.aggregate([
             { $match: { participants: { $all: [initiator._id, recipient._id] } } },
             {
@@ -123,7 +146,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         conversation?.messages.length === MESSAGES_BATCH && (nextCursor = conversation?.messages[MESSAGES_BATCH - 1]._id.toString());
         conversation?.messages.reverse();
 
-        return { conversation: { ...(conversation || {}), recipient }, nextCursor };
+        return { conversation: { ...(conversation || {}), recipient, isInitiatorBlocked, isRecipientBlocked }, nextCursor };
     };
 
     getPreviousMessages = async ({ cursor, initiator, recipientId }: { cursor: string, initiator: UserDocument, recipientId: string }) => {        
@@ -179,10 +202,11 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
                                             pipeline: [{ $project: { name: 1 } }],
                                         },
                                     },
-                                    { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
+                                    { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
                                 ],
                             },
                         },
+                        { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
                         { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
                         { $project: { source: 0, sourceRefPath: 0 } },
                     ],

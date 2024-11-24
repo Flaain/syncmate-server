@@ -19,6 +19,9 @@ export class Message {
     @Prop({ type: String, enum: MessageSourceRefPath, required: true })
     sourceRefPath: MessageSourceRefPath;
 
+    @Prop({ type: Boolean, default: false })
+    inReply?: boolean;
+
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Message' })
     replyTo?: mongoose.Types.ObjectId;
 

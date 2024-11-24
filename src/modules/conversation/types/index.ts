@@ -21,7 +21,7 @@ export enum CONVERSATION_EVENTS {
 }
 
 export interface ConversationDeleteMessageParams {
-    messageIds: Array<string>;
+    findedMessageIds: Array<string>;
     conversationId: string;
     initiatorId: string;
     recipientId: string;
@@ -32,6 +32,7 @@ export interface ConversationDeleteMessageParams {
 
 export interface ConversationSendMessageParams {
     initiator: UserDocument;
+    initiatorSocketId: string;
     feedItem: FeedWrapper<ConversationFeed>;
 }
 
@@ -41,6 +42,7 @@ export interface ConversationEditMessageParams {
     conversationId: string;
     recipientId: string;
     initiatorId: string;
+    initiatorSocketId: string;
 }
 
 export interface ConversationCreateParams {

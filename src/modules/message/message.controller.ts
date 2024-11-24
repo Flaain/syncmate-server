@@ -1,8 +1,7 @@
-import { Body, Controller, Delete, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { MessageSendDTO } from './dtos/message.send.dto';
 import { RequestWithUser, Routes } from 'src/utils/types';
-import { MessageDeleteDTO } from './dtos/message.delete.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Throttle } from '@nestjs/throttler';
@@ -20,60 +19,52 @@ export class MessageController {
     ) {}
     
     @Post('send/:recipientId')
-    async send(@Req() req: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId', paramPipe) recipientId: string) {
-        const { feedItem, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: req.doc.user });
+    async send(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId', paramPipe) recipientId: string) {
+        const { feedItem, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: user });
         
         isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
-            initiatorId: req.doc.user._id.toString(), 
+            initiatorId: user._id.toString(), 
             recipientId: feedItem.item.recipient._id.toString(),
             conversationId: feedItem.item._id.toString()
         });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: req.doc.user, feedItem });
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, initiatorSocketId: dto.socket_id, feedItem });
 
         return feedItem.item.lastMessage;
     }
 
     @Post('reply/:messageId')
-    async reply(@Req() req: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId', paramPipe) messageId: string) {
-        const { feedItem } = await this.messageService.reply({ ...dto, messageId, initiator: req.doc.user });
+    async reply(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId', paramPipe) messageId: string) {
+        const feedItem = await this.messageService.reply({ ...dto, messageId, initiator: user });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: req.doc.user, feedItem })
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, initiatorSocketId: dto.socket_id });
 
         return feedItem.item.lastMessage;
     }
 
     @Patch('edit/:messageId')
-    async edit(@Req() req: RequestWithUser, @Body() dto: MessageSendDTO, @Param('messageId', paramPipe) messageId: string) {
-        const { message, conversationId, isLastMessage, recipientId } = await this.messageService.edit({
-            messageId,
-            initiatorId: req.doc.user._id,
-            message: dto.message,
-        });
+    async edit(@Req() {doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('messageId', paramPipe) messageId: string) {
+        const { message, conversationId, isLastMessage, recipientId } = await this.messageService.edit({ messageId, initiator: user, message: dto.message });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_EDIT, { 
             message, 
             isLastMessage,
             conversationId,
             recipientId,
-            initiatorId: req.doc.user._id.toString(),
+            initiatorSocketId: dto.socket_id,
+            initiatorId: user._id.toString(),
         })
 
         return message;
     }
 
-    @Delete('delete')
-    async delete(@Req() req: RequestWithUser, @Body() dto: MessageDeleteDTO) {
-        const { conversationId, findedMessageIds, ...message } = await this.messageService.delete({ ...dto, initiatorId: req.doc.user._id });
+    @Delete('delete/:recipientId')
+    async delete(@Req() { doc: { user } }: RequestWithUser, @Param('recipientId', paramPipe) recipientId: string, @Query('messageIds') messageIds: Array<string>) {
+        const initiatorId = user._id.toString();
+        const data = await this.messageService.delete({ messageIds, recipientId, initiatorId });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_DELETE, { 
-            ...message,
-            recipientId: dto.recipientId,
-            messageIds: findedMessageIds,
-            conversationId, 
-            initiatorId: req.doc.user._id.toString() 
-        })
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_DELETE, { ...data, recipientId, initiatorId });
 
-        return message;
+        return data.findedMessageIds;
     }
 }

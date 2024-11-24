@@ -15,7 +15,6 @@ import { OtpService } from '../otp/otp.service';
 import { SessionService } from '../session/session.service';
 import { OtpType } from '../otp/types';
 import { UserDocument } from '../user/types';
-import { User } from '../user/schemas/user.schema';
 import { SessionDocument } from '../session/types';
 import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
@@ -44,19 +43,20 @@ export class AuthService {
     }
 
     signin = async ({ login, password, userAgent, userIP }: WithUserAgent<SigninDTO>) => {
-        const user = await this.userService.findOne({ filter: { isDeleted: false, $or: [{ email: login }, { login }] }, projection: { blockList: 0 } });
+        const user = (await this.userService.aggregate([
+            { $match: { isDeleted: false, $or: [{ email: login }, { login }] } },
+            { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
+            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+        ]))[0];
 
         if (!user || !(await this.bcryptService.compareAsync(password, user.password))) {
             throw new AppException({ message: 'Invalid credentials' }, HttpStatus.UNAUTHORIZED);
         }
 
-        const populatedUser = await user.populate({ path: 'avatar', model: 'File', select: 'url' })
-
-        const { password: _,  ...rest } = populatedUser.toObject<User>();
-
         const session = await this.sessionService.create({ userId: user._id, userAgent, userIP });
-        
-        return { user: { ...rest, avatar: rest.avatar }, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
+        const { password: _, ...restUser } = user;
+
+        return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
     }
 
     signup = async ({ password, otp, userAgent, userIP, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     

@@ -9,6 +9,7 @@ import { User, UserSchema } from '../user/schemas/user.schema';
 import { FeedModule } from '../feed/feed.module';
 import { AuthModule } from '../auth/auth.module';
 import { MessageModule } from '../message/message.module';
+import { BlockList, BlockListSchema } from '../user/schemas/user.blocklist.schema';
 
 @Module({
     imports: [
@@ -18,9 +19,10 @@ import { MessageModule } from '../message/message.module';
         MongooseModule.forFeature([
             { name: Conversation.name, schema: ConversationSchema },
             { name: User.name, schema: UserSchema },
+            { name: BlockList.name, schema: BlockListSchema },
         ]),
         forwardRef(() => AuthModule),
-        forwardRef(() => MessageModule)
+        forwardRef(() => MessageModule),
     ],
     providers: [ConversationService],
     controllers: [ConversationController],

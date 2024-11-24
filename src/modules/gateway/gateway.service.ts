@@ -133,14 +133,14 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
-    onNewMessage({ initiator, feedItem }: ConversationSendMessageParams) {
+    onNewMessage({ initiator, initiatorSocketId, feedItem }: ConversationSendMessageParams) {
         const initiatorId = initiator._id.toString();
         const recipientId = feedItem.item.recipient._id.toString();
         const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
 
-        this.server.to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
+        (this.server.sockets.sockets.get(initiatorSocketId) ?? this.server).to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
         this.server.to(roomId).emit(CONVERSATION_EVENTS.STOP_TYPING);
-        console.log(initiatorId, recipientId, roomId);
+
         [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
             sockets?.forEach((socket) => {
                 socket.emit(FEED_EVENTS.CREATE, { 
@@ -160,8 +160,8 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_EDIT)
-    onEditMessage({ isLastMessage, conversationId, initiatorId, message, recipientId }: ConversationEditMessageParams) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
+    onEditMessage({ isLastMessage, conversationId, initiatorId, initiatorSocketId, message, recipientId }: ConversationEditMessageParams) {
+        (this.server.sockets.sockets.get(initiatorSocketId) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
         
         isLastMessage && [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
             sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage: message }));
@@ -169,8 +169,8 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_DELETE)
-    handleDeleteMessage({ initiatorId, recipientId, conversationId, messageIds, lastMessage, lastMessageSentAt, isLastMessage }: ConversationDeleteMessageParams) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_DELETE, messageIds);
+    handleDeleteMessage({ initiatorId, recipientId, conversationId, findedMessageIds, lastMessage, lastMessageSentAt, isLastMessage }: ConversationDeleteMessageParams) {
+        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_DELETE, findedMessageIds);
         
         isLastMessage && [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
             sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage, lastActionAt: lastMessageSentAt }));
