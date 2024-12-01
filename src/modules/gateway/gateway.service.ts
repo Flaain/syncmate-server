@@ -210,7 +210,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
 
         const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
 
-        client.to(roomId).emit(CONVERSATION_EVENTS.START_TYPING);
+        client.to(roomId).emit(CONVERSATION_EVENTS.START_TYPING, client.data.user._id.toString());
 
         this.sockets.get(recipientId)?.forEach((socket) => {
             !socket.rooms.has(roomId) && socket.emit(FEED_EVENTS.START_TYPING, {

@@ -5,7 +5,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { UserDocument, UserSearchParams } from './types';
-import { Model, isValidObjectId } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Providers } from 'src/utils/types';
 import { UserStatusDTO } from './dtos/user.status.dto';
 import { UserNameDto } from './dtos/user.name.dto';
@@ -15,6 +15,7 @@ import { FileService } from '../file/file.service';
 import { checkErrors } from './constants';
 import { defaultSuccessResponse } from 'src/utils/constants';
 import { BlockList } from './schemas/user.blocklist.schema';
+import { recipientProjection } from '../conversation/constants';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
@@ -119,5 +120,18 @@ export class UserService extends BaseService<UserDocument, User> {
         ]);
 
         return { _id: newFile._id.toString(), url }
+    }
+
+    getRecipient = async (recipientId: string | Types.ObjectId) => {
+        const recipient = (await this.aggregate([
+            { $match: { _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId } },
+            { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
+            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+            { $project: recipientProjection },
+        ]))[0];
+
+        if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
+
+        return recipient;
     }
 }

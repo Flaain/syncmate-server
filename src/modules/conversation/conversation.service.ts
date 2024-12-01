@@ -7,7 +7,7 @@ import { AppException } from 'src/utils/exceptions/app.exception';
 import { UserService } from '../user/user.service';
 import { UserDocument } from '../user/types';
 import { BaseService } from 'src/utils/services/base/base.service';
-import { MESSAGES_BATCH } from './constants';
+import { MESSAGES_BATCH, recipientProjection } from './constants';
 import { Providers } from 'src/utils/types';
 import { S3Client } from '@aws-sdk/client-s3';
 import { FeedService } from '../feed/feed.service';
@@ -51,14 +51,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
     getConversation = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
         let nextCursor: string | null = null;
         
-        const recipient = (await this.userService.aggregate([
-            { $match: { _id: new Types.ObjectId(recipientId) } },
-            { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
-            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-            { $project: { login: 1, name: 1, isDeleted: 1, isPrivate: 1, isOfficial: 1, lastSeenAt: 1, avatar: 1, presence: 1 } },
-        ]))[0];
-
-        if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
+        const recipient = await this.userService.getRecipient(recipientId);
 
         const { 0: { isInitiatorBlocked, isRecipientBlocked } } = await this.blocklistModel.aggregate([
             {
@@ -146,7 +139,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         conversation?.messages.length === MESSAGES_BATCH && (nextCursor = conversation?.messages[MESSAGES_BATCH - 1]._id.toString());
         conversation?.messages.reverse();
 
-        return { conversation: { ...(conversation || {}), recipient, isInitiatorBlocked, isRecipientBlocked }, nextCursor };
+        return { conversation: { ...(conversation || { messages: [] }), recipient, isInitiatorBlocked, isRecipientBlocked }, nextCursor };
     };
 
     getPreviousMessages = async ({ cursor, initiator, recipientId }: { cursor: string, initiator: UserDocument, recipientId: string }) => {        

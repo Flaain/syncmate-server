@@ -9,9 +9,7 @@ import { BaseService } from 'src/utils/services/base/base.service';
 
 @Injectable()
 export class SessionService extends BaseService<SessionDocument, Session> {
-    constructor(
-        @InjectModel(Session.name) private readonly sessionModel: Model<SessionDocument>,
-    ) {
+    constructor(@InjectModel(Session.name) private readonly sessionModel: Model<SessionDocument>) {
         super(sessionModel);
     }
 
@@ -30,19 +28,34 @@ export class SessionService extends BaseService<SessionDocument, Session> {
 
     getSessions = async ({ userId, sessionId }: { userId: Types.ObjectId | string; sessionId: string }) => {
         const sessions = await this.find({ filter: { userId }, projection: { userId: 0 } });
-        const currentSession = sessions.find(({ _id }) => _id.toString() === sessionId);
+        const result = { currentSession: null, sessions: [] };
 
-        if (!currentSession) {
-            throw new AppException({ 
-                message: 'Session expired',
-                errorCode: AppExceptionCode.EXPIRED_ACCESS_TOKEN,
-            }, HttpStatus.UNAUTHORIZED);
+        for (const session of sessions) {
+            const _id = session._id.toString();
+            
+            const { 0: userAgent, 1: userIP } = await Promise.all([
+                fetch(`https://api.ipregistry.co/user_agent?key=${process.env.IPREGISTRY_KEY}`, {
+                    method: 'POST',
+                    body: JSON.stringify([session.userAgent]),
+                    headers: { 'Content-Type': 'application/json' }
+                }).then((res) => (res.ok ? res.json() : null)),
+                fetch(
+                    `https://api.ipregistry.co/${session.userIP}?key=${process.env.IPREGISTRY_KEY}&fields=-currency,-security,-location.country.languages,-location.country.borders`,
+                ).then((res) => (res.ok ? res.json() : null)),
+            ]);
+
+            const data = {
+                _id,
+                userAgent: userAgent?.results[0] || null,
+                userIP,
+                createdAt: session.createdAt,
+                expiresAt: session.expiresAt,
+            };
+            
+            _id === sessionId ? (result.currentSession = data) : result.sessions.push(data);
         }
 
-        return {
-            currentSession: {},
-            sessions: []
-        };
+        return result;
     };
 
     dropSession = async ({ initiatorUserId, initiatorSessionId, sessionId }: DropSessionParams) => {

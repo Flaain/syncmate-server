@@ -17,7 +17,11 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
         super(feedModel);
     }
 
-    search = async (params: FeedSearchParams) => this.userService.aggregate(getSearchPipeline(params));
+    search = async (params: FeedSearchParams) => {
+        const result = (await this.userService.aggregate(getSearchPipeline(params)))[0];
+
+        return result;
+    };
 
     getFeed = async ({ initiatorId, cursor }: GetFeedParams) => {
         const config = { limit: 10, nextCursor: null };

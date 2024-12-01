@@ -41,13 +41,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
     send = async ({ recipientId, message, initiator }: SendMessageParams) => {
         await this.isMessagingRestricted({ initiator, recipientId });
         
-        const recipient = await this.userService.findOne({ 
-            filter: { _id: recipientId, isDeleted: false }, 
-            options: { populate: { path: 'avatar', model: 'File', select: 'url' } },
-            projection: recipientProjection,
-        });
-
-        if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
+        const recipient = await this.userService.getRecipient(recipientId);
 
         const ctx = { isNewConversation: false, conversation: null };
 
