@@ -1,9 +1,9 @@
-import { Document, FilterQuery, MongooseUpdateQueryOptions, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline } from 'mongoose';
+import { Document, FilterQuery, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline } from 'mongoose';
 import { SessionDocument } from 'src/modules/session/types';
 import { UserDocument } from 'src/modules/user/types';
 
-export type RequestWithUser = Request & { user: { doc: UserDocument; sessionId: string } };
-export type RequestWithSession = Request & { user: { session: SessionDocument } };
+export type RequestWithUser = Request & { doc: { user: UserDocument; sessionId: string } };
+export type RequestWithSession = Request & { doc: { session: SessionDocument } };
 
 export enum THROTTLERS {
     DEFAULT = 'DEFAULT',
@@ -29,7 +29,7 @@ export enum Providers {
     S3_CLIENT = 'S3_CLIENT',
 }
 
-export enum AuthCookiesName {
+export enum Cookies {
     ACCESS_TOKEN = 'accessToken',
     REFRESH_TOKEN = 'refreshToken',
 }
@@ -43,6 +43,7 @@ export enum JWT_KEYS {
 
 export enum AppExceptionCode {
     MISSING_ACCESS_TOKEN = 'MISSING_ACCESS_TOKEN',
+    MISSING_REFRESH_TOKEN = 'MISSING_REFRESH_TOKEN',
     EXPIRED_ACCESS_TOKEN = 'EXPIRED_ACCESS_TOKEN',
     INVALID_ACCESS_TOKEN = 'INVALID_ACCESS_TOKEN',
     REFRESH_DENIED = 'REFRESH_DENIED',

@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { IConversation } from '../types';
 
 @Schema({ timestamps: true })
 export class Conversation {

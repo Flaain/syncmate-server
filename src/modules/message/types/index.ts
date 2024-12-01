@@ -1,19 +1,21 @@
-import { Message } from "../schemas/message.schema"
-import { Document, HydratedDocument, SchemaTimestampsConfig, Types } from 'mongoose';
+import { Message } from '../schemas/message.schema';
+import { HydratedDocument, Types } from 'mongoose';
 import { MessageSendDTO } from '../dtos/message.send.dto';
-import { MessageDeleteDTO } from '../dtos/message.delete.dto';
-import { MessageEditDTO } from '../dtos/message.edit.dto';
-import { RequestWithUser } from "src/utils/types";
-import { UserDocument } from "src/modules/user/types";
+import { UserDocument } from 'src/modules/user/types';
 
-export enum MessageRefPath {
+export enum MessageSourceRefPath {
+    CONVERSATION = 'Conversation',
+    GROUP = 'Group',
+}
+
+export enum MessageSenderRefPath {
     USER = 'User',
-    PARTICIPANT = 'Participant'
+    PARTICIPANT = 'Participant',
 }
 
 export interface IMessage {
     _id: Types.ObjectId;
-    sender: Types.ObjectId
+    sender: Types.ObjectId;
     hasBeenEdited?: boolean;
     hasBeenRead?: boolean;
     text: string;
@@ -24,17 +26,7 @@ export interface IMessage {
     updatedAt?: Date;
 }
 
-export interface IMessageService {
-    send(params: SendMessageParams): Promise<Message & { conversationId: Types.ObjectId }>;
-}
-
-export interface IMessageController {
-    send(req: RequestWithUser, dto: MessageSendDTO, recipientId: string): Promise<Message>;
-    edit(req: RequestWithUser, dto: MessageEditDTO, messageId: string): Promise<Message>;
-}
-
 export type MessageDocument = HydratedDocument<Message>;
 
 export type SendMessageParams = MessageSendDTO & { recipientId: string; initiator: UserDocument };
-export type EditMessageParams = MessageEditDTO & { initiatorId: Types.ObjectId, messageId: string };
-export type DeleteMessageParams = MessageDeleteDTO & { initiatorId: Types.ObjectId };
+export type EditMessageParams = { message: string; initiator: UserDocument; messageId: string };

@@ -1,18 +1,17 @@
-import { Body, Controller, Delete, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { MessageSendDTO } from './dtos/message.send.dto';
 import { RequestWithUser, Routes } from 'src/utils/types';
-import { MessageDeleteDTO } from './dtos/message.delete.dto';
-import { MessageEditDTO } from './dtos/message.edit.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { IMessageController } from './types';
-import { AccessGuard } from 'src/utils/guards/access.guard';
 import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Throttle } from '@nestjs/throttler';
-import { CONVERSATION_EVENTS } from '../gateway/types';
+import { AccessGuard } from '../auth/guards/auth.access.guard';
+import { CONVERSATION_EVENTS } from '../conversation/types';
+import { paramPipe } from 'src/utils/constants';
 
 @Throttle({ default: { limit: 50, ttl: 60000 } })
 @Controller(Routes.MESSAGE)
+@UseGuards(AccessGuard)
 export class MessageController {
     constructor(
         private readonly messageService: MessageService,
@@ -20,71 +19,52 @@ export class MessageController {
     ) {}
     
     @Post('send/:recipientId')
-    @UseGuards(AccessGuard)
-    async send(@Req() req: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId') recipientId: string) {
-        const { recipient, message, conversation, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: req.user.doc });
-
-       isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
-            recipient: recipient.toObject(),
-            initiator: req.user.doc,
-            conversationId: conversation._id,
-            lastMessageSentAt: conversation.lastMessageSentAt,
+    async send(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId', paramPipe) recipientId: string) {
+        const { feedItem, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: user });
+        
+        isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
+            initiatorId: user._id.toString(), 
+            recipientId: feedItem.item.recipient._id.toString(),
+            conversationId: feedItem.item._id.toString()
         });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
-            message,
-            recipientId,
-            conversationId: conversation._id,
-            initiatorId: req.user.doc._id.toString()
-        });
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, initiatorSocketId: dto.socket_id, feedItem });
 
-        return message;
+        return feedItem.item.lastMessage;
     }
 
     @Post('reply/:messageId')
-    @UseGuards(AccessGuard)
-    async reply(@Req() req: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId') messageId: string) {
-        const { message, conversationId } = await this.messageService.reply({ ...dto, messageId, initiator: req.user.doc });
+    async reply(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId', paramPipe) messageId: string) {
+        const feedItem = await this.messageService.reply({ ...dto, messageId, initiator: user });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
-            message,
-            recipientId: dto.recipientId,
-            conversationId,
-            initiatorId: req.user.doc._id.toString(),
-        })
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, initiatorSocketId: dto.socket_id });
 
-        return message;
+        return feedItem.item.lastMessage;
     }
 
     @Patch('edit/:messageId')
-    @UseGuards(AccessGuard)
-    async edit(@Req() req: RequestWithUser, @Body() dto: MessageEditDTO, @Param('messageId') messageId: string) {
-        const { message, conversationId, isLastMessage } = await this.messageService.edit({ ...dto, messageId, initiatorId: req.user.doc._id });
+    async edit(@Req() {doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('messageId', paramPipe) messageId: string) {
+        const { message, conversationId, isLastMessage, recipientId } = await this.messageService.edit({ messageId, initiator: user, message: dto.message });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_EDIT, { 
             message, 
             isLastMessage,
             conversationId,
-            recipientId: dto.recipientId,
-            initiatorId: req.user.doc._id.toString(),
+            recipientId,
+            initiatorSocketId: dto.socket_id,
+            initiatorId: user._id.toString(),
         })
 
         return message;
     }
 
-    @Delete('delete')
-    @UseGuards(AccessGuard)
-    async delete(@Req() req: RequestWithUser, @Body() dto: MessageDeleteDTO) {
-        const { conversationId, findedMessageIds, ...message } = await this.messageService.delete({ ...dto, initiatorId: req.user.doc._id });
+    @Delete('delete/:recipientId')
+    async delete(@Req() { doc: { user } }: RequestWithUser, @Param('recipientId', paramPipe) recipientId: string, @Query('messageIds') messageIds: Array<string>) {
+        const initiatorId = user._id.toString();
+        const data = await this.messageService.delete({ messageIds, recipientId, initiatorId });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_DELETE, { 
-            ...message,
-            recipientId: dto.recipientId,
-            messageIds: findedMessageIds,
-            conversationId, 
-            initiatorId: req.user.doc._id.toString() 
-        })
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_DELETE, { ...data, recipientId, initiatorId });
 
-        return message;
+        return data.findedMessageIds;
     }
 }

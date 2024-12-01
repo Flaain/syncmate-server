@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { GatewayManager } from './gateway.manager';
 import { GatewayService } from './gateway.service';
-import { UserModule } from '../user/user.module';
 import { CookiesModule } from 'src/utils/services/cookies/cookies.module';
 import { ConversationModule } from '../conversation/conversation.module';
+import { AuthModule } from '../auth/auth.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
-    imports: [UserModule, ConversationModule, JwtModule, CookiesModule],
-    providers: [GatewayService, GatewayManager],
+    imports: [ConversationModule, AuthModule, CookiesModule, UserModule],
+    providers: [GatewayService],
+    exports: [GatewayService],
 })
 export class GatewayModule {}

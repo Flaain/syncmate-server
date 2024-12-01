@@ -1,33 +1,31 @@
 import { Controller, Delete, Get, Param, Req, UseGuards } from '@nestjs/common';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { SessionService } from './session.service';
-import { AccessGuard } from 'src/utils/guards/access.guard';
+import { AccessGuard } from '../auth/guards/auth.access.guard';
 
 @Controller(Routes.SESSION)
+@UseGuards(AccessGuard)
 export class SessionController {
     constructor(private readonly sessionService: SessionService) {}
 
     @Get()
-    @UseGuards(AccessGuard)
     getSessions(@Req() req: RequestWithUser) {
-        return this.sessionService.getSessions({ userId: req.user.doc._id.toString(), sessionId: req.user.sessionId });
+        return this.sessionService.getSessions({ userId: req.doc.user._id.toString(), sessionId: req.doc.sessionId });
     }
 
     @Delete()
-    @UseGuards(AccessGuard)
     terminateAllSessions(@Req() req: RequestWithUser) {
         return this.sessionService.terminateAllSessions({
-            initiatorSessionId: req.user.sessionId,
-            initiatorUserId: req.user.doc._id.toString(),
+            initiatorSessionId: req.doc.sessionId,
+            initiatorUserId: req.doc.user._id.toString(),
         });
     }
 
     @Delete(':sessionId')
-    @UseGuards(AccessGuard)
     dropSession(@Req() req: RequestWithUser, @Param('sessionId') sessionId: string) {
         return this.sessionService.dropSession({
-            initiatorUserId: req.user.doc._id.toString(),
-            initiatorSessionId: req.user.sessionId,
+            initiatorUserId: req.doc.user._id.toString(),
+            initiatorSessionId: req.doc.sessionId,
             sessionId: sessionId,
         });
     }

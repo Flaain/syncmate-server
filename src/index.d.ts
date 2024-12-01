@@ -29,6 +29,9 @@ namespace NodeJS {
         BUCKET_NAME: string;
         BUCKET_KEY_ID: string;
         BUCKET_SECRET: string;
+
+        // IPREGISTRY
+        IPREGISTRY_KEY: string;
     }
 }
 

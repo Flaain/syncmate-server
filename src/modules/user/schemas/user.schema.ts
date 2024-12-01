@@ -19,9 +19,6 @@ export class User {
     @Prop({ type: Date, required: true })
     birthDate: Date;
 
-    @Prop({ type: [{ type: mongoose.Schema.ObjectId, ref: 'User' }] })
-    blockList?: Array<mongoose.Schema.Types.ObjectId>;
-
     @Prop({ type: Boolean, required: true, default: false })
     isPrivate?: boolean;
 

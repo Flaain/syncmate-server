@@ -1,5 +1,3 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-export const userStatusSchema = z.strictObject({
-    status: z.string().max(70)
-})
+export const userStatusSchema = z.strictObject({ status: z.string().max(70) });

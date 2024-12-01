@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { AppException } from '../exceptions/app.exception';
+import { PipeTransform } from '@nestjs/common';
+import { validateParamId } from '../helpers/validateParamId';
+
+export const paramPipe: PipeTransform = { transform: validateParamId };
+export const defaultSuccessResponse = { message: 'OK' };
 
 export const onlyLatinRegExp = /^[a-zA-Z0-9_\s]*$/;
 export const allowCyrillicRegExp = /^[\p{L}0-9\s]*$/u;

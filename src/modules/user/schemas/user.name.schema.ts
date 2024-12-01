@@ -1,6 +1,4 @@
-import { z } from "zod";
-import { nameForSchema } from "src/utils/constants";
+import { z } from 'zod';
+import { nameForSchema } from 'src/utils/constants';
 
-export const userNameSchema = z.strictObject({
-    name: nameForSchema
-})
+export const userNameSchema = z.strictObject({ name: nameForSchema });

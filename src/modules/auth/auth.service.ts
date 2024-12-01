@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { Types } from 'mongoose';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { WithUserAgent } from './types';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JWT_KEYS } from 'src/utils/types';
 import { AppException } from 'src/utils/exceptions/app.exception';
@@ -15,11 +15,10 @@ import { OtpService } from '../otp/otp.service';
 import { SessionService } from '../session/session.service';
 import { OtpType } from '../otp/types';
 import { UserDocument } from '../user/types';
-import { User } from '../user/schemas/user.schema';
 import { SessionDocument } from '../session/types';
-import { ForgotDTO } from './dtos/auth.forgot.dto';
 import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
+import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Injectable()
 export class AuthService {
@@ -43,23 +42,24 @@ export class AuthService {
         return { accessToken, refreshToken };
     }
 
-    signin = async ({ login, password, userAgent }: WithUserAgent<SigninDTO>) => {
-        const user = await this.userService.findOne({ filter: { isDeleted: false, $or: [{ email: login }, { login }] }, projection: { blockList: 0 } });
+    signin = async ({ login, password, userAgent, userIP }: WithUserAgent<SigninDTO>) => {
+        const user = (await this.userService.aggregate([
+            { $match: { isDeleted: false, $or: [{ email: login }, { login }] } },
+            { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
+            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+        ]))[0];
 
         if (!user || !(await this.bcryptService.compareAsync(password, user.password))) {
             throw new AppException({ message: 'Invalid credentials' }, HttpStatus.UNAUTHORIZED);
         }
 
-        const populatedUser = await user.populate({ path: 'avatar', model: 'File', select: 'url' })
+        const session = await this.sessionService.create({ userId: user._id, userAgent, userIP });
+        const { password: _, ...restUser } = user;
 
-        const { password: _,  ...rest } = populatedUser.toObject<User>();
-
-        const session = await this.sessionService.create({ userId: user._id, userAgent });
-        
-        return { user: { ...rest, avatar: rest.avatar }, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
+        return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
     }
 
-    signup = async ({ password, otp, userAgent, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     
+    signup = async ({ password, otp, userAgent, userIP, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     
         if (await this.userService.findOne({ filter: { $or: [{ email: dto.email }, { login: dto.login }] } })) {
             throw new AppException({ 
                 message: 'An error occurred during the registration process. Please try again.'
@@ -71,8 +71,8 @@ export class AuthService {
         }
 
         const hashedPassword = await this.bcryptService.hashAsync(password);
-        const { password: _, blockList, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
-        const session = await this.sessionService.create({ userId: restUser._id, userAgent });
+        const { password: _, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
+        const session = await this.sessionService.create({ userId: restUser._id, userAgent, userIP });
 
         return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: restUser._id.toString() }) };
     };
@@ -83,14 +83,6 @@ export class AuthService {
             sessionId: session._id.toString() 
         }),
     });
-
-    forgot = async ({ email }: ForgotDTO) => {
-        if (!await this.userService.findOne({ filter: { email, isDeleted: false } })) {
-            return { retryDelay: 120000 };
-        };
-
-        return this.otpService.createOtp({ email, type: OtpType.PASSWORD_RESET });
-    };
 
     reset = async ({ email, otp, password }: AuthResetDTO) => {
         if (!await this.otpService.findOneAndDelete({ otp, email, type: OtpType.PASSWORD_RESET })) {
@@ -108,7 +100,7 @@ export class AuthService {
 
         await Promise.all([this.sessionService.deleteMany({ userId: user._id }), user.updateOne({ password: hashedPassword })])
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     }
 
     changePassword = async ({ initiator, ...dto }: z.infer<typeof authChangePasswordSchema> & { initiator: UserDocument }) => {
@@ -127,7 +119,7 @@ export class AuthService {
             ]);
         }
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     }
 
     logout = async ({ user, sessionId }: { user: UserDocument; sessionId: string }) => {
@@ -137,7 +129,7 @@ export class AuthService {
 
         await session.deleteOne()
 
-        return { status: HttpStatus.OK, message: 'OK' };
+        return defaultSuccessResponse;
     }
 
     validate = async (_id: Types.ObjectId | string) => {
@@ -151,8 +143,24 @@ export class AuthService {
         return candidate;
     };
 
+    verifyToken = <T extends object = Record<string, any>>(token: string, type: 'access' | 'refresh') => {
+        try {
+            const data = this.jwtService.verify<T>(token, {
+                secret: this.configService.get(type === 'access' ? JWT_KEYS.ACCESS_TOKEN_SECRET : JWT_KEYS.REFRESH_TOKEN_SECRET),
+            })
+    
+            return data;
+        } catch (error) {
+            console.log(error);
+            const isTokenExpiredError = error instanceof TokenExpiredError;
+            throw new AppException({ 
+                message: isTokenExpiredError ? error.message : 'Error appearce while trying to verify token' 
+            }, isTokenExpiredError ? HttpStatus.UNAUTHORIZED : HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     profile = async (user: UserDocument) => {
-        const { password, blockList, ...rest } = user.toObject();
+        const { password, ...rest } = user.toObject();
 
         return { ...rest };
     };

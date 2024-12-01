@@ -6,9 +6,12 @@ import { DatesService } from 'src/utils/services/dates/dates.service';
 export class Session {
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true })
     userId: mongoose.Types.ObjectId;
-
+    
     @Prop({ type: String })
     userAgent?: string;
+    
+    @Prop({ type: String })
+    userIP: string;
 
     @Prop({ type: Date, required: true, default: DatesService.oneMonthFromNow })
     expiresAt?: Date;
