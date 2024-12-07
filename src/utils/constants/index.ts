@@ -13,6 +13,8 @@ export const noSearchResults: Pick<AppException, 'message'> = {
     message: 'No results were found for your search',
 }
 
+export const otpForSchema = z.string().trim().length(6, 'Invalid OTP code'); 
+
 export const passwordForSchema = z
     .string()
     .trim()
@@ -29,7 +31,7 @@ export const nameForSchema = z
 export const loginForSchema = z
     .string()
     .trim()
-    .min(5, 'Login must be at least 5 characters long')
+    .min(4, 'Login must be at least 5 characters long')
     .max(32, 'Login must be at most 32 characters long')
     .toLowerCase()
     .regex(onlyLatinRegExp, 'Invalid login. Please use only a-z, 0-9 and underscore characters');
@@ -55,35 +57,16 @@ export const reservedLogins = [
     'root',
     'support',
     'system',
-    'superuser',
-    'guest',
     'owner',
-    'webmaster',
     'info',
     'help',
-    'service',
     'user',
     'test',
     'manager',
-    'operator',
     'developer',
     'staff',
     'team',
-    'bot',
     'noreply',
-    'contact',
     'account',
-    'billing',
-    'sales',
-    'security',
-    'operations',
-    'network',
-    'sysadmin',
-    'customer',
     'official',
-    'qa',
-    'techsupport',
-    'api',
-    'maintenance',
-    'monitoring',
 ];

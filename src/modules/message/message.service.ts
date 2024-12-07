@@ -13,6 +13,7 @@ import { FeedService } from '../feed/feed.service';
 import { FEED_TYPE } from '../feed/types';
 import { BlockList } from '../user/schemas/user.blocklist.schema';
 import { recipientProjection } from '../conversation/constants';
+import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Injectable()
 export class MessageService extends BaseService<MessageDocument, Message> {
@@ -107,6 +108,23 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             },
         };
     };
+
+    read = async ({ messageId, initiator, recipientId }: Pick<MessageReplyDTO, 'recipientId'> & { initiator: UserDocument, messageId: string }) => {
+        const message = await this.findOne({ filter: { _id: messageId, sender: { $ne: initiator._id } } });
+
+        if (!message) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
+
+        const conversation = await this.conversationService.findOne({
+            filter: {
+                participants: { $all: [initiator._id, recipientId] },
+                messages: { $in: message._id },
+            },
+        });
+
+        if (!conversation) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
+
+        await message.updateOne({ hasBeenRead: true })
+    }
 
     reply = async ({ messageId, recipientId, message, initiator }: MessageReplyDTO & { initiator: UserDocument, messageId: string }) => {
         await this.isMessagingRestricted({ recipientId, initiator });

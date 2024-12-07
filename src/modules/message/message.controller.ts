@@ -7,7 +7,7 @@ import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Throttle } from '@nestjs/throttler';
 import { AccessGuard } from '../auth/guards/auth.access.guard';
 import { CONVERSATION_EVENTS } from '../conversation/types';
-import { paramPipe } from 'src/utils/constants';
+import { defaultSuccessResponse, paramPipe } from 'src/utils/constants';
 
 @Throttle({ default: { limit: 50, ttl: 60000 } })
 @Controller(Routes.MESSAGE)
@@ -28,22 +28,22 @@ export class MessageController {
             conversationId: feedItem.item._id.toString()
         });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, initiatorSocketId: dto.socket_id, feedItem });
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, session_id: dto.session_id });
 
-        return feedItem.item.lastMessage;
+        return feedItem.item.lastMessage
     }
 
     @Post('reply/:messageId')
     async reply(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId', paramPipe) messageId: string) {
         const feedItem = await this.messageService.reply({ ...dto, messageId, initiator: user });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, initiatorSocketId: dto.socket_id });
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, session_id: dto.session_id });
 
         return feedItem.item.lastMessage;
     }
 
     @Patch('edit/:messageId')
-    async edit(@Req() {doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('messageId', paramPipe) messageId: string) {
+    async edit(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('messageId', paramPipe) messageId: string) {
         const { message, conversationId, isLastMessage, recipientId } = await this.messageService.edit({ messageId, initiator: user, message: dto.message });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_EDIT, { 
@@ -51,11 +51,24 @@ export class MessageController {
             isLastMessage,
             conversationId,
             recipientId,
-            initiatorSocketId: dto.socket_id,
+            session_id: dto.session_id,
             initiatorId: user._id.toString(),
         })
 
         return message;
+    }
+    
+    @Patch('read/:messageId')
+    async read(
+        @Req() { doc: { user } }: RequestWithUser, 
+        @Body() { session_id, recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>, 
+        @Param('messageId', paramPipe) messageId: string
+    ) {
+        await this.messageService.read({ messageId, initiator: user, recipientId });
+
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_READ, { messageId, initiatorId: user._id.toString(), recipientId, session_id })
+
+        return defaultSuccessResponse;
     }
 
     @Delete('delete/:recipientId')

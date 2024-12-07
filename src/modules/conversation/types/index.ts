@@ -8,6 +8,7 @@ import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
 export enum CONVERSATION_EVENTS {
     JOIN = 'conversation.join',
     LEAVE = 'conversation.leave',
+    MESSAGE_READ = 'conversation.message.read',
     MESSAGE_SEND = 'conversation.message.send',
     MESSAGE_EDIT = 'conversation.message.edit',
     MESSAGE_DELETE = 'conversation.message.delete',
@@ -17,7 +18,7 @@ export enum CONVERSATION_EVENTS {
     USER_BLOCK = 'conversation.user.block',
     USER_UNBLOCK = 'conversation.user.unblock',
     START_TYPING = 'conversation.start.typing',
-    STOP_TYPING = 'conversation.stop.typing',
+    STOP_TYPING = 'conversation.stop.typing'
 }
 
 export interface ConversationDeleteMessageParams {
@@ -32,8 +33,8 @@ export interface ConversationDeleteMessageParams {
 
 export interface ConversationSendMessageParams {
     initiator: UserDocument;
-    initiatorSocketId: string;
     feedItem: FeedWrapper<ConversationFeed>;
+    session_id: string;
 }
 
 export interface ConversationEditMessageParams {
@@ -42,7 +43,7 @@ export interface ConversationEditMessageParams {
     conversationId: string;
     recipientId: string;
     initiatorId: string;
-    initiatorSocketId: string;
+    session_id: string;
 }
 
 export interface ConversationCreateParams {

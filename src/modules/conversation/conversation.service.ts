@@ -7,7 +7,7 @@ import { AppException } from 'src/utils/exceptions/app.exception';
 import { UserService } from '../user/user.service';
 import { UserDocument } from '../user/types';
 import { BaseService } from 'src/utils/services/base/base.service';
-import { MESSAGES_BATCH, recipientProjection } from './constants';
+import { MESSAGES_BATCH } from './constants';
 import { Providers } from 'src/utils/types';
 import { S3Client } from '@aws-sdk/client-s3';
 import { FeedService } from '../feed/feed.service';
@@ -57,11 +57,11 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
             {
                 $facet: {
                     isInitiatorBlocked: [
-                        { $match: { user: recipient._id, $expr: { $in: [initiator._id, '$blocklist'] } } },
+                        { $match: { user: recipient._id, $expr: { $in: [initiator._id, { $ifNull: ['$blocklist', []] }] } } },
                         { $project: { isBlocked: { $literal: true } } },
                     ],
                     isRecipientBlocked: [
-                        { $match: { user: initiator._id, $expr: { $in: [recipient._id, '$blocklist'] } } },
+                        { $match: { user: initiator._id, $expr: { $in: [recipient._id, { $ifNull: ['$blocklist', []] }] } } },
                         { $project: { isBlocked: { $literal: true } } }
                     ],
                 },

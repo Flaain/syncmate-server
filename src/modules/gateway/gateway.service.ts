@@ -48,7 +48,6 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
         server.use(async (socket, next) => {
             try {
                 const cookies = socket.handshake.headers.cookie;
-    
                 if (!cookies) throw new AppException({ message: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
                 
                 const { accessToken } = this.cookiesService.parseCookies(cookies);
@@ -59,7 +58,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
                 const user = await this.authService.validate(userId);
 
                 socket.data.user = user;
-                
+
                 return next();
             } catch (error) {
                 console.log(error);
@@ -132,13 +131,18 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
         client.leave(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
     }
 
+    @OnEvent(CONVERSATION_EVENTS.MESSAGE_READ)
+    onMessageRead({ messageId, initiatorId, recipientId, session_id }: { messageId: string; initiatorId: string; recipientId: string; session_id: string }) {
+        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, messageId);
+    }
+
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
-    onNewMessage({ initiator, initiatorSocketId, feedItem }: ConversationSendMessageParams) {
+    onNewMessage({ initiator, session_id, feedItem }: ConversationSendMessageParams) {
         const initiatorId = initiator._id.toString();
         const recipientId = feedItem.item.recipient._id.toString();
         const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
 
-        (this.server.sockets.sockets.get(initiatorSocketId) ?? this.server).to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
+        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
         this.server.to(roomId).emit(CONVERSATION_EVENTS.STOP_TYPING);
 
         [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
@@ -160,8 +164,8 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_EDIT)
-    onEditMessage({ isLastMessage, conversationId, initiatorId, initiatorSocketId, message, recipientId }: ConversationEditMessageParams) {
-        (this.server.sockets.sockets.get(initiatorSocketId) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
+    onEditMessage({ isLastMessage, conversationId, initiatorId, session_id, message, recipientId }: ConversationEditMessageParams) {
+        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
         
         isLastMessage && [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
             sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage: message }));
