@@ -48,7 +48,15 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         ctx.conversation = await this.conversationService.findOne({
             filter: { participants: { $all: [recipient._id, initiator._id] } },
-            projection: { _id: 1 },
+            options: {
+                populate: {
+                    match: { hasBeenRead: false },
+                    path: 'messages',
+                    model: 'Message',
+                    select: '_id sender',
+                },
+            },
+            projection: { _id: 1, messages: 1 },
         });
         
         if (!ctx.conversation) {
@@ -87,6 +95,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         return {
             isNewConversation: ctx.isNewConversation,
+            unreadMessages: ctx.conversation.messages.reduce((acc, message) => {
+                const key = message.sender.toString() === initiator._id.toString() ? 'recipient' : 'initiator';
+                
+                return { ...acc, [key]: acc[key] + 1 }
+            }, { initiator: 0, recipient: 1 }),
             feedItem: {
                 _id,
                 type,

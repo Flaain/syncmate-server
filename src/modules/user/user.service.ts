@@ -122,6 +122,15 @@ export class UserService extends BaseService<UserDocument, User> {
         return { _id: newFile._id.toString(), url }
     }
 
+    toRecipient = (user: UserDocument) => ({
+        _id: user._id.toString(),
+        avatar: user.avatar,
+        name: user.name,
+        login: user.login,
+        presence: user.presence,
+        isOfficial: user.isOfficial,
+    })
+
     getRecipient = async (recipientId: string | Types.ObjectId) => {
         const recipient = (await this.aggregate([
             { $match: { _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId } },

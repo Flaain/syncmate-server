@@ -137,7 +137,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
-    onNewMessage({ initiator, session_id, feedItem }: ConversationSendMessageParams) {
+    onNewMessage({ initiator, session_id, unreadMessages, feedItem }: ConversationSendMessageParams) {
         const initiatorId = initiator._id.toString();
         const recipientId = feedItem.item.recipient._id.toString();
         const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
@@ -147,15 +147,17 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
 
         [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
             sockets?.forEach((socket) => {
+                const isInitiator = socket.data.user._id.toString() === initiatorId;
                 socket.emit(FEED_EVENTS.CREATE, { 
                     ...feedItem, 
                     item: { 
                         ...feedItem.item,
-                        recipient: socket.data.user._id.toString() === initiatorId ? feedItem.item.recipient : toRecipient(initiator.toObject())
+                        unreadMessages: unreadMessages[isInitiator ? 'initiator' : 'recipient'],
+                        recipient: isInitiator ? feedItem.item.recipient : this.userService.toRecipient(initiator)
                     } 
                 });
     
-                socket.data.user._id.toString() === recipientId && socket.emit(FEED_EVENTS.STOP_TYPING, {
+                !isInitiator && socket.emit(FEED_EVENTS.STOP_TYPING, {
                     _id: feedItem._id,
                     participant: { _id: initiatorId },
                 });

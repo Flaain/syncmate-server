@@ -35,6 +35,7 @@ export interface ConversationSendMessageParams {
     initiator: UserDocument;
     feedItem: FeedWrapper<ConversationFeed>;
     session_id: string;
+    unreadMessages: Record<'initiator' | 'recipient', number>;
 }
 
 export interface ConversationEditMessageParams {

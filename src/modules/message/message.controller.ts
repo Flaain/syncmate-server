@@ -20,15 +20,20 @@ export class MessageController {
     
     @Post('send/:recipientId')
     async send(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId', paramPipe) recipientId: string) {
-        const { feedItem, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: user });
-        
+        const { feedItem, unreadMessages, isNewConversation } = await this.messageService.send({ ...dto, recipientId, initiator: user });
+
         isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
             initiatorId: user._id.toString(), 
             recipientId: feedItem.item.recipient._id.toString(),
             conversationId: feedItem.item._id.toString()
         });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, session_id: dto.session_id });
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { 
+            feedItem, 
+            unreadMessages, 
+            initiator: user, 
+            session_id: dto.session_id
+        });
 
         return feedItem.item.lastMessage
     }

@@ -37,6 +37,18 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                 {
                     $lookup: {
                         from: 'messages',
+                        localField: 'messages',
+                        foreignField: '_id',
+                        as: 'unreadMessages',
+                        pipeline: [
+                            { $match: { hasBeenRead: false, sender: { $ne: initiatorId } } },
+                            { $count: 'unreadMessages' },
+                        ]
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'messages',
                         localField: 'lastMessage',
                         foreignField: '_id',
                         as: 'lastMessage',
@@ -56,7 +68,7 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                     },
                 },
                 { $unwind: { path: '$lastMessage', preserveNullAndEmptyArrays: true } },
-                { $project: { _id: 1, lastMessage: 1, recipient: { $first: '$participants' } } },
+                { $project: { _id: 1, lastMessage: 1, unreadMessages: { $first: '$unreadMessages.unreadMessages' }, recipient: { $first: '$participants' } } },
             ],
         },
     },
