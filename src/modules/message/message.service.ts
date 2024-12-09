@@ -48,15 +48,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         ctx.conversation = await this.conversationService.findOne({
             filter: { participants: { $all: [recipient._id, initiator._id] } },
-            options: {
-                populate: {
-                    match: { hasBeenRead: false },
-                    path: 'messages',
-                    model: 'Message',
-                    select: '_id sender',
-                },
-            },
-            projection: { _id: 1, messages: 1 },
+            projection: { _id: 1 },
         });
         
         if (!ctx.conversation) {
@@ -93,13 +85,14 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             $push: { messages: newMessage._id },
         });
 
+        const { 0: unreadFromInitiator, 1: unreadFromRecipient } = await Promise.all([
+            this.countDocuments({ hasBeenRead: false, source: ctx.conversation._id, sender: initiator._id }),
+            this.countDocuments({ hasBeenRead: false, source: ctx.conversation._id, sender: recipient._id }),
+        ]);
+        
         return {
             isNewConversation: ctx.isNewConversation,
-            unreadMessages: ctx.conversation.messages.reduce((acc, message) => {
-                const key = message.sender.toString() === initiator._id.toString() ? 'recipient' : 'initiator';
-                
-                return { ...acc, [key]: acc[key] + 1 }
-            }, { initiator: 0, recipient: 1 }),
+            unreadMessages: { initiator: unreadFromRecipient, recipient: unreadFromInitiator },
             feedItem: {
                 _id,
                 type,
@@ -123,7 +116,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
     };
 
     read = async ({ messageId, initiator, recipientId }: Pick<MessageReplyDTO, 'recipientId'> & { initiator: UserDocument, messageId: string }) => {
-        const message = await this.findOne({ filter: { _id: messageId, sender: { $ne: initiator._id } } });
+        const message = await this.findOne({ filter: { _id: messageId, sender: recipientId, hasBeenRead: false } });
 
         if (!message) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
 
@@ -137,6 +130,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         if (!conversation) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
 
         await message.updateOne({ hasBeenRead: true })
+
+        return conversation._id.toString();
     }
 
     reply = async ({ messageId, recipientId, message, initiator }: MessageReplyDTO & { initiator: UserDocument, messageId: string }) => {
@@ -146,7 +141,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
         
-        const replyMessage = await this.findById(messageId, { options: { populate: { path: 'sender', model: 'User', select: { _id: 1, name: 1 } } } });
+        const replyMessage = await this.findById(messageId, { options: { populate: { path: 'sender', model: 'User', select: '_id name' } } });
 
         if (!replyMessage) throw new AppException({ message: 'Cannot reply to a message that does not exist' }, HttpStatus.NOT_FOUND);
 
@@ -173,33 +168,38 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             options: { returnDocument: 'after' } 
         });
 
-        await Promise.all([
+        const { 0: unreadFromInitiator, 1: unreadFromRecipient } = await Promise.all([
+            this.countDocuments({ hasBeenRead: false, source: conversation._id, sender: initiator._id }),
+            this.countDocuments({ hasBeenRead: false, source: conversation._id, sender: recipient._id }),
             replyMessage.updateOne({ $push: { replies: newMessage._id } }),
             conversation.updateOne({ lastMessage: newMessage._id, lastMessageSentAt: newMessage.createdAt, $push: { messages: newMessage._id } })
         ]);
 
         return {
-            _id,
-            type,
-            lastActionAt,
-            item: {
-                _id: conversation._id,
-                lastMessage: {
-                    ...newMessage.toObject<Message>(),
-                    replyTo: {
-                        _id: replyMessage._id,
-                        text: replyMessage.text,
-                        sender: replyMessage.sender,
+            unreadMessages: { initiator: unreadFromRecipient, recipient: unreadFromInitiator },
+            feedItem: {
+                _id,
+                type,
+                lastActionAt,
+                item: {
+                    _id: conversation._id,
+                    lastMessage: {
+                        ...newMessage.toObject<Message>(),
+                        replyTo: {
+                            _id: replyMessage._id,
+                            text: replyMessage.text,
+                            sender: replyMessage.sender,
+                        },
+                        sender: {
+                            _id: initiator._id,
+                            name: initiator.name,
+                            email: initiator.email,
+                            isOfficial: initiator.isOfficial,
+                            avatar: initiator.avatar,
+                        },
                     },
-                    sender: {
-                        _id: initiator._id,
-                        name: initiator.name,
-                        email: initiator.email,
-                        isOfficial: initiator.isOfficial,
-                        avatar: initiator.avatar,
-                    },
+                    recipient,
                 },
-                recipient,
             },
         };
     }

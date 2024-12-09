@@ -16,6 +16,7 @@ export enum FEED_EVENTS {
     CREATE = 'feed.create',
     UPDATE = 'feed.update',
     DELETE = 'feed.delete',
+    UNREAD_COUNTER = 'feed.unread.counter',
     USER_PRESENCE = 'feed.user.presence',
     START_TYPING = 'feed.start.typing',
     STOP_TYPING = 'feed.stop.typing'

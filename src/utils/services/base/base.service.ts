@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { AggregateOptions, Document, FilterQuery, InsertManyOptions, Model, PipelineStage, QueryOptions, Types } from 'mongoose';
+import { AggregateOptions, Document, FilterQuery, InsertManyOptions, Model, PipelineStage, QueryOptions, RootFilterQuery, Types } from 'mongoose';
 import { FindQuery, UpdateQuery } from 'src/utils/types';
 
 @Injectable()
 export class BaseService<Doc extends Document, Entity> {
     constructor(private readonly model: Model<Doc>) {}
 
+    countDocuments = (filter: RootFilterQuery<Doc>) => this.model.countDocuments(filter);
     create = (body: Omit<Entity, '_id' | 'created'>) => this.model.create(body);
     total = ({ filter, projection, options }: FindQuery<Doc>) => this.model.find(filter, projection, options).countDocuments();
     findOne = ({ filter, projection, options }: FindQuery<Doc>) => this.model.findOne(filter, projection, options);

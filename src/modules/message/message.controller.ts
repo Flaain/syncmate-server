@@ -40,9 +40,9 @@ export class MessageController {
 
     @Post('reply/:messageId')
     async reply(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId', paramPipe) messageId: string) {
-        const feedItem = await this.messageService.reply({ ...dto, messageId, initiator: user });
+        const { feedItem, unreadMessages } = await this.messageService.reply({ ...dto, messageId, initiator: user });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { initiator: user, feedItem, session_id: dto.session_id });
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { unreadMessages, initiator: user, feedItem, session_id: dto.session_id });
 
         return feedItem.item.lastMessage;
     }
@@ -69,9 +69,15 @@ export class MessageController {
         @Body() { session_id, recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>, 
         @Param('messageId', paramPipe) messageId: string
     ) {
-        await this.messageService.read({ messageId, initiator: user, recipientId });
+       const conversationId = await this.messageService.read({ messageId, initiator: user, recipientId });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_READ, { messageId, initiatorId: user._id.toString(), recipientId, session_id })
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_READ, {
+            conversationId,
+            messageId,
+            initiatorId: user._id.toString(),
+            recipientId,
+            session_id,
+        });
 
         return defaultSuccessResponse;
     }

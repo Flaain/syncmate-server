@@ -12,7 +12,6 @@ import { FEED_EVENTS } from '../feed/types';
 import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
 import { OnEvent } from '@nestjs/event-emitter';
 import { UserService } from '../user/user.service';
-import { toRecipient } from '../conversation/utils/toRecipient';
 
 @WebSocketGateway({ cors: { origin: ['http://localhost:4173', 'http://localhost:5173', 'https://fchat-client.vercel.app'], credentials: true } })
 export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
@@ -132,8 +131,9 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_READ)
-    onMessageRead({ messageId, initiatorId, recipientId, session_id }: { messageId: string; initiatorId: string; recipientId: string; session_id: string }) {
+    onMessageRead({ conversationId, messageId, initiatorId, recipientId, session_id }: { conversationId: string; messageId: string; initiatorId: string; recipientId: string; session_id: string }) {
         (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, messageId);
+        this.sockets.get(initiatorId)?.forEach((socket) => socket.emit(FEED_EVENTS.UNREAD_COUNTER, { itemId: conversationId, action: 'dec' }));
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
