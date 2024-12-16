@@ -1,10 +1,10 @@
-import { Controller, Delete, Get, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Req } from '@nestjs/common';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { SessionService } from './session.service';
-import { AccessGuard } from '../auth/guards/auth.access.guard';
+import { Auth } from '../auth/decorators/auth.decorator';
 
+@Auth()
 @Controller(Routes.SESSION)
-@UseGuards(AccessGuard)
 export class SessionController {
     constructor(private readonly sessionService: SessionService) {}
 

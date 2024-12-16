@@ -12,10 +12,10 @@ export const createGroupSchema = z
             .optional(),
     })
     .superRefine(({ participants }, ctx) => {
-        participants.length && participants.forEach((participant) => {
-            !isValidObjectId(participant) && ctx.addIssue({
+        participants.length && participants.forEach((id) => {
+            !isValidObjectId(id) && ctx.addIssue({
                 code: 'custom',
-                message: `Participant id (${participant}) is invalid`,
+                message: `Participant id (${id}) is invalid`,
             });
         });
     });

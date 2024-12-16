@@ -1,17 +1,17 @@
-import { Body, Controller, Delete, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { MessageSendDTO } from './dtos/message.send.dto';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Throttle } from '@nestjs/throttler';
-import { AccessGuard } from '../auth/guards/auth.access.guard';
 import { CONVERSATION_EVENTS } from '../conversation/types';
 import { defaultSuccessResponse, paramPipe } from 'src/utils/constants';
+import { Auth } from '../auth/decorators/auth.decorator';
 
-@Throttle({ default: { limit: 50, ttl: 60000 } })
+@Auth()
 @Controller(Routes.MESSAGE)
-@UseGuards(AccessGuard)
+@Throttle({ default: { limit: 50, ttl: 60000 } })
 export class MessageController {
     constructor(
         private readonly messageService: MessageService,
@@ -69,14 +69,15 @@ export class MessageController {
         @Body() { session_id, recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>, 
         @Param('messageId', paramPipe) messageId: string
     ) {
-       const conversationId = await this.messageService.read({ messageId, initiator: user, recipientId });
+       const { conversationId, readedAt } = await this.messageService.read({ messageId, initiator: user, recipientId });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_READ, {
             conversationId,
             messageId,
-            initiatorId: user._id.toString(),
+            readedAt,
             recipientId,
             session_id,
+            initiatorId: user._id.toString()
         });
 
         return defaultSuccessResponse;

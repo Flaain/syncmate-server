@@ -1,7 +1,7 @@
 import { HydratedDocument, SchemaTimestampsConfig } from 'mongoose';
 import { Types } from 'mongoose';
 import { Feed } from '../schemas/feed.schema';
-import { Pagination } from 'src/utils/types';
+import { IPagination } from 'src/utils/types';
 import { ConversationDocument } from 'src/modules/conversation/types';
 import { UserDocument } from 'src/modules/user/types';
 
@@ -45,5 +45,3 @@ export interface GetFeedPipelineParams {
     cursor?: string;
     limit?: number;
 }
-
-export type FeedSearchParams = Pick<Pagination, 'query' | 'limit' | 'page'> & { initiatorId: Types.ObjectId };

@@ -1,16 +1,13 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
-import { Pagination, RequestWithUser, Routes } from 'src/utils/types';
+import { Controller, Get, Query, Req } from '@nestjs/common';
+import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
 import { FeedService } from './feed.service';
-import { Pagination as PaginationDecorator } from 'src/utils/decorators/pagination';
-import { PaginationResolver } from 'src/utils/services/pagination/patination.resolver';
-import { AccessGuard } from '../auth/guards/auth.access.guard';
+import { Pagination } from 'src/utils/decorators/pagination.decorator.';
+import { Auth } from '../auth/decorators/auth.decorator';
 
+@Auth()
 @Controller(Routes.FEED)
-@UseGuards(AccessGuard)
-export class FeedController extends PaginationResolver {
-    constructor(private readonly feedService: FeedService) {
-        super();
-    }
+export class FeedController {
+    constructor(private readonly feedService: FeedService) {}
 
     @Get()
     getFeed(@Req() req: RequestWithUser, @Query('cursor') cursor?: string) {
@@ -18,7 +15,7 @@ export class FeedController extends PaginationResolver {
     }
 
     @Get('search')
-    async search(@Req() req: RequestWithUser, @PaginationDecorator() params: Pagination) {
-        return this.feedService.search({ ...params, initiatorId: req.doc.user._id });
+    search(@Req() { doc: { user } }: RequestWithUser, @Pagination() params: IPagination) {
+        return this.feedService.search({ ...params, initiatorId: user._id });
     }
 }

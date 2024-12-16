@@ -1,5 +1,6 @@
 import { PipelineStage } from "mongoose";
 import { GetFeedPipelineParams } from "../types";
+import { recipientProjection } from "src/modules/conversation/constants";
 
 export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipelineParams): Array<PipelineStage> => [
     { $match: { users: { $in: [initiatorId] }, ...(cursor && { lastActionAt: { $lt: new Date(cursor) } }) } },
@@ -29,7 +30,7 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                                 },
                             },
                             { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-                            { $project: { login: 1, name: 1, isOfficial: 1, isDeleted: 1, presence: 1, avatar: 1 } },
+                            { $project: recipientProjection },
                         ],
                         as: 'participants',
                     },
@@ -73,6 +74,7 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
         },
     },
     // { $lookup: { from: 'groups', localField: 'item', foreignField: '_id', as: '#' } },
+    // { $lookup: { from: 'channels', localField: 'item', foreignField: '_id', as: '#' } },
     // { $lookup: { from: 'clouds', localField: 'item', foreignField: '_id', as: '#' } },
     {
         $set: {

@@ -7,7 +7,7 @@ import { CookiesService } from 'src/utils/services/cookies/cookies.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { PRESENCE, USER_EVENTS } from '../user/types';
 import { AuthService } from '../auth/auth.service';
-import { CONVERSATION_EVENTS, ConversationCreateParams, ConversationDeleteMessageParams, ConversationDeleteParams, ConversationEditMessageParams, ConversationSendMessageParams } from '../conversation/types';
+import { CONVERSATION_EVENTS, ConversationCreateParams, ConversationDeleteMessageParams, ConversationDeleteParams, ConversationEditMessageParams, ConversationMessageReadParams, ConversationSendMessageParams } from '../conversation/types';
 import { FEED_EVENTS } from '../feed/types';
 import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -131,8 +131,8 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_READ)
-    onMessageRead({ conversationId, messageId, initiatorId, recipientId, session_id }: { conversationId: string; messageId: string; initiatorId: string; recipientId: string; session_id: string }) {
-        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, messageId);
+    onMessageRead({ conversationId, messageId, initiatorId, readedAt, recipientId, session_id }: ConversationMessageReadParams) {
+        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, { _id: messageId, readedAt });
         this.sockets.get(initiatorId)?.forEach((socket) => socket.emit(FEED_EVENTS.UNREAD_COUNTER, { itemId: conversationId, action: 'dec' }));
     }
 
@@ -175,11 +175,19 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_DELETE)
-    handleDeleteMessage({ initiatorId, recipientId, conversationId, findedMessageIds, lastMessage, lastMessageSentAt, isLastMessage }: ConversationDeleteMessageParams) {
+    handleDeleteMessage({ initiatorId, recipientId, unreadMessages, conversationId, findedMessageIds, lastMessage, lastMessageSentAt, isLastMessage }: ConversationDeleteMessageParams) {
         this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_DELETE, findedMessageIds);
         
-        isLastMessage && [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
-            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage, lastActionAt: lastMessageSentAt }));
+        [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
+            sockets?.forEach((socket) => {
+                isLastMessage && socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage, lastActionAt: lastMessageSentAt });
+                
+                socket.emit(FEED_EVENTS.UNREAD_COUNTER, { 
+                    action: 'set',
+                    itemId: conversationId,
+                    ...(socket.data.user._id.toString() === recipientId && { count: unreadMessages }) 
+                })
+            });
         });
     }
 

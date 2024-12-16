@@ -1,9 +1,13 @@
-import { Document, FilterQuery, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline } from 'mongoose';
+import { Document, FilterQuery, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline, Types, PipelineStage } from 'mongoose';
 import { SessionDocument } from 'src/modules/session/types';
 import { UserDocument } from 'src/modules/user/types';
 
 export type RequestWithUser = Request & { doc: { user: UserDocument; sessionId: string } };
 export type RequestWithSession = Request & { doc: { session: SessionDocument } };
+export type SearchPipelineParams = IPagination & {
+    initiatorId: Types.ObjectId;
+    pipeline: Array<PipelineStage.FacetPipelineStage>;
+};
 
 export enum THROTTLERS {
     DEFAULT = 'DEFAULT',
@@ -66,7 +70,7 @@ export interface ImplementAppException {
     getStatusCode(): number;
 }
 
-export interface Pagination {
+export interface IPagination {
     query: string;
     page: number;
     limit: number;
@@ -77,10 +81,6 @@ export interface PaginationWrapper<T> {
     limit: number;
     items: Array<T>;
     onSuccess?: (items: Array<T>) => Array<any>;
-}
-
-export interface IPaginationResolver {
-    wrapPagination: <T>({ page, limit, items, onSuccess }: PaginationWrapper<T>) => WrappedInPagination<T>;
 }
 
 export interface WrappedInPagination<T> {

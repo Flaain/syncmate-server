@@ -23,12 +23,7 @@ export class GroupService extends BaseService<GroupDocument, Group> {
         super(groupModel);
     }
 
-    createGroup = async ({
-        login,
-        name,
-        initiator,
-        participants: dtoParticipants,
-    }: CreateGroupDTO & { initiator: UserDocument }) => {
+    createGroup = async ({ login, name, initiator, participants: dtoParticipants }: CreateGroupDTO & { initiator: UserDocument }) => {
         if ((await this.exists({ login })) || (await this.userService.exists({ login }))) {
             throw new AppException(loginExistError, HttpStatus.CONFLICT);
         }
@@ -44,10 +39,7 @@ export class GroupService extends BaseService<GroupDocument, Group> {
 
         const group = await this.create({ login, name, owner: initiator._id });
         
-        const participants = await this.participantService.insertMany([initiator, ...findedUsers].map((user) => ({ 
-            user: user._id, 
-            group: group._id 
-        })));
+        const participants = await this.participantService.insertMany([initiator, ...findedUsers].map((user) => ({ user: user._id, group: group._id })));
 
         await group.updateOne({ participants: participants.map((participant) => participant._id), owner: participants[0]._id });
 
@@ -67,7 +59,7 @@ export class GroupService extends BaseService<GroupDocument, Group> {
 
         if (!group) throw new AppException({ message: 'Group not found' }, HttpStatus.NOT_FOUND);
 
-        const participant = await this.participantService.findOne({ filter: { userId: initiator._id, groupId: group._id } });
+        const participant = await this.participantService.findOne({ filter: { user: initiator._id, group: group._id } });
 
         if (participant) {
             const populatedGroup = await group.populate({

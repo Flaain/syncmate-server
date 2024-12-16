@@ -41,6 +41,9 @@ export class Message {
     attachments?: Array<mongoose.Types.ObjectId>;
     
     @Prop({ type: Date })
+    readedAt?: Date;
+
+    @Prop({ type: Date })
     createdAt?: Date;
 
     @Prop({ type: Date })

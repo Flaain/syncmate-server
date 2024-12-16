@@ -16,6 +16,7 @@ import { checkErrors } from './constants';
 import { defaultSuccessResponse } from 'src/utils/constants';
 import { BlockList } from './schemas/user.blocklist.schema';
 import { recipientProjection } from '../conversation/constants';
+import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
@@ -57,16 +58,22 @@ export class UserService extends BaseService<UserDocument, User> {
     }
 
     search = async ({ initiatorId, query, page, limit }: UserSearchParams) => {
-        const users = await this.find({
-            filter: {
-                _id: { $ne: initiatorId },
-                $or: [{ name: { $regex: query, $options: 'i' } }, { login: { $regex: query, $options: 'i' } }],
-                isPrivate: false,
-                isDeleted: false,
-            },
-            projection: { _id: 1, name: 1, login: 1, isOfficial: 1 },
-            options: { limit, skip: page * limit, sort: { createdAt: -1 } },
-        }).lean();
+        const users = (await this.aggregate(getSearchPipeline({
+            limit,
+            page,
+            pipeline: [
+                {
+                    $match: {
+                        _id: { $ne: initiatorId },
+                        $or: [{ name: { $regex: query, $options: 'i' } }, { login: { $regex: query, $options: 'i' } }],
+                        isPrivate: false,
+                        isDeleted: false,
+                    },
+                },
+                { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar' } },
+                { $project: { _id: 1, name: 1, login: 1, isOfficial: 1 } }
+            ]
+        })))[0];
 
         return users;
     };

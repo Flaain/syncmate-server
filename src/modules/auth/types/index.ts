@@ -1,3 +1,11 @@
+export enum ROLES {
+    ADMIN = 'admin',
+    MODERATOR = 'moderator',
+    USER = 'user'
+}
+
+export type ERoles = `${ROLES}`;
+
 export type WithAuthTokens<T, K extends string> = {
     [key in K]: T;
 } & {

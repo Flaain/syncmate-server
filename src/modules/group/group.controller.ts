@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { GroupService } from './group.service';
 import { CreateGroupDTO } from './dtos/create.group.dto';
-import { AccessGuard } from '../auth/guards/auth.access.guard';
+import { Auth } from '../auth/decorators/auth.decorator';
 
+@Auth()
 @Controller(Routes.GROUP)
-@UseGuards(AccessGuard)
 export class GroupController {
     constructor(private readonly groupService: GroupService) {}
 

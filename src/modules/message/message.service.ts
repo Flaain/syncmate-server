@@ -128,10 +128,12 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         });
 
         if (!conversation) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
+        
+        const readedAt = new Date();
+        
+        await message.updateOne({ hasBeenRead: true, readedAt });
 
-        await message.updateOne({ hasBeenRead: true })
-
-        return conversation._id.toString();
+        return { conversationId: conversation._id.toString(), readedAt: readedAt.toISOString() };
     }
 
     reply = async ({ messageId, recipientId, message, initiator }: MessageReplyDTO & { initiator: UserDocument, messageId: string }) => {
@@ -293,20 +295,24 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
             },
         }) : null : conversation.lastMessage;
-        const lastMessageSentAt = (lastMessage as Message)?.createdAt ?? conversation.createdAt;
+        const lastMessageSentAt = 'createdAt' in lastMessage ? lastMessage.createdAt : conversation.createdAt;
 
-        await Promise.all([
+        await this.deleteMany({ _id: { $in: findedMessageIds }, sender: initiatorId });
+        // because Promise.all run in parallel first of all need to make sure that all messages are deleted to count the unread messages
+
+        const { 0: unreadMessages } = await Promise.all([
+            this.countDocuments({ hasBeenRead: false, source: conversation._id, sender: initiatorId }),
             isLastMessage && conversation.updateOne({ lastMessage, lastMessageSentAt }),
-            this.deleteMany({ _id: { $in: findedMessageIds }, sender: initiatorId }),
             this.feedService.updateOne({ filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION }, update: { lastActionAt: lastMessageSentAt } }),
         ]);
 
         return {
+            unreadMessages,
             findedMessageIds,
             isLastMessage,
             lastMessage,
             lastMessageSentAt,
-            conversationId: conversation._id.toString(),
+            conversationId: conversation._id.toString()
         }
     }
 }

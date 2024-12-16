@@ -18,12 +18,13 @@ export enum CONVERSATION_EVENTS {
     USER_BLOCK = 'conversation.user.block',
     USER_UNBLOCK = 'conversation.user.unblock',
     START_TYPING = 'conversation.start.typing',
-    STOP_TYPING = 'conversation.stop.typing'
+    STOP_TYPING = 'conversation.stop.typing',
 }
 
 export interface ConversationDeleteMessageParams {
     findedMessageIds: Array<string>;
     conversationId: string;
+    unreadMessages: number;
     initiatorId: string;
     recipientId: string;
     isLastMessage: boolean;
@@ -44,6 +45,15 @@ export interface ConversationEditMessageParams {
     conversationId: string;
     recipientId: string;
     initiatorId: string;
+    session_id: string;
+}
+
+export interface ConversationMessageReadParams {
+    conversationId: string;
+    readedAt: string;
+    messageId: string;
+    initiatorId: string;
+    recipientId: string;
     session_id: string;
 }
 
