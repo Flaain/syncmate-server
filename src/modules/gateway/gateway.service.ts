@@ -148,13 +148,14 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
         [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
             sockets?.forEach((socket) => {
                 const isInitiator = socket.data.user._id.toString() === initiatorId;
+                
                 socket.emit(FEED_EVENTS.CREATE, { 
                     ...feedItem, 
-                    item: { 
+                    item: {
                         ...feedItem.item,
-                        unreadMessages: unreadMessages[isInitiator ? 'initiator' : 'recipient'],
+                        ...(!isInitiator && { unreadMessages }),
                         recipient: isInitiator ? feedItem.item.recipient : this.userService.toRecipient(initiator)
-                    } 
+                    }
                 });
     
                 !isInitiator && socket.emit(FEED_EVENTS.STOP_TYPING, {

@@ -8,11 +8,6 @@ export enum MessageSourceRefPath {
     GROUP = 'Group',
 }
 
-export enum MessageSenderRefPath {
-    USER = 'User',
-    PARTICIPANT = 'Participant',
-}
-
 export interface IMessage {
     _id: Types.ObjectId;
     sender: Types.ObjectId;

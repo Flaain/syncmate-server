@@ -1,14 +1,11 @@
 import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MessageSenderRefPath, MessageSourceRefPath } from '../types';
+import { MessageSourceRefPath } from '../types';
 
 @Schema({ timestamps: true })
 export class Message {
-    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'senderRefPath' })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' })
     sender: mongoose.Types.ObjectId;
-
-    @Prop({ type: String, enum: MessageSenderRefPath, required: true })
-    senderRefPath: MessageSenderRefPath;
 
     @Prop({ type: String, required: true })
     text: string;

@@ -1,8 +1,8 @@
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Message } from './schemas/message.schema';
-import { Model, Types } from 'mongoose';
-import { EditMessageParams, MessageDocument, MessageSenderRefPath, MessageSourceRefPath, SendMessageParams } from './types';
+import { Model } from 'mongoose';
+import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
 import { ConversationService } from '../conversation/conversation.service';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BaseService } from 'src/utils/services/base/base.service';
@@ -13,7 +13,6 @@ import { FeedService } from '../feed/feed.service';
 import { FEED_TYPE } from '../feed/types';
 import { BlockList } from '../user/schemas/user.blocklist.schema';
 import { recipientProjection } from '../conversation/constants';
-import { defaultSuccessResponse } from 'src/utils/constants';
 
 @Injectable()
 export class MessageService extends BaseService<MessageDocument, Message> {
@@ -60,7 +59,6 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         const newMessage = await this.create({ 
             sender: initiator._id, 
-            senderRefPath: MessageSenderRefPath.USER,
             text: message.trim(),
             source: ctx.conversation._id,
             sourceRefPath: MessageSourceRefPath.CONVERSATION,
@@ -85,14 +83,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             $push: { messages: newMessage._id },
         });
 
-        const { 0: unreadFromInitiator, 1: unreadFromRecipient } = await Promise.all([
-            this.countDocuments({ hasBeenRead: false, source: ctx.conversation._id, sender: initiator._id }),
-            this.countDocuments({ hasBeenRead: false, source: ctx.conversation._id, sender: recipient._id }),
-        ]);
+        const unreadMessages = await this.countDocuments({ hasBeenRead: false, source: ctx.conversation._id, sender: initiator._id });
         
         return {
             isNewConversation: ctx.isNewConversation,
-            unreadMessages: { initiator: unreadFromRecipient, recipient: unreadFromInitiator },
+            unreadMessages,
             feedItem: {
                 _id,
                 type,
@@ -156,7 +151,6 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         const newMessage = await this.create({ 
             sender: initiator._id, 
-            senderRefPath: MessageSenderRefPath.USER,
             text: message.trim(), 
             replyTo: replyMessage._id,
             source: conversation._id,
@@ -170,15 +164,14 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             options: { returnDocument: 'after' } 
         });
 
-        const { 0: unreadFromInitiator, 1: unreadFromRecipient } = await Promise.all([
+        const { 0: unreadMessages} = await Promise.all([
             this.countDocuments({ hasBeenRead: false, source: conversation._id, sender: initiator._id }),
-            this.countDocuments({ hasBeenRead: false, source: conversation._id, sender: recipient._id }),
             replyMessage.updateOne({ $push: { replies: newMessage._id } }),
             conversation.updateOne({ lastMessage: newMessage._id, lastMessageSentAt: newMessage.createdAt, $push: { messages: newMessage._id } })
         ]);
 
         return {
-            unreadMessages: { initiator: unreadFromRecipient, recipient: unreadFromInitiator },
+            unreadMessages,
             feedItem: {
                 _id,
                 type,
