@@ -14,7 +14,7 @@ import { InviteService } from '../invite/invite.service';
 import { FeedService } from '../feed/feed.service';
 import { FEED_TYPE } from '../feed/types';
 import { ParticipantRole } from '../participant/types';
-import { getGroupPipeline } from './utils/getGroupPipeline';
+import { getGroupPipeline, getParticipantsPipeline } from './utils/pipelines';
 
 @Injectable()
 export class GroupService extends BaseService<GroupDocument, Group> {
@@ -95,4 +95,12 @@ export class GroupService extends BaseService<GroupDocument, Group> {
             return { ...group, displayAs: GroupView.GUEST };
         }
     };
+
+    getParticipants = async ({ groupId, cursor, initiator }: { groupId: string; cursor: string; initiator: UserDocument }) => {
+        const { me, participants } = (await this.aggregate(getParticipantsPipeline(groupId, initiator._id, cursor)))[0];
+        
+        if (!me) throw new AppException({ message: 'Cannot get participants' }, HttpStatus.BAD_REQUEST);
+
+        return participants;
+    }
 }

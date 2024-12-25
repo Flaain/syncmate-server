@@ -36,6 +36,7 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
                         localField: 'avatar',
                         foreignField: '_id',
                         as: 'avatar',
+                        pipeline: [{ $project: { url: 1 } }],
                     },
                 },
                 { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },

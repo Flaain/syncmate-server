@@ -12,6 +12,9 @@ export class Participant {
 
     @Prop({ type: String, enum: ParticipantRole, required: true, default: ParticipantRole.PARTICIPANT })
     role: ParticipantRole;
+
+    @Prop({ type: Number })
+    unread_counter?: number;
 }
 
 export const ParticipantSchema = SchemaFactory.createForClass(Participant);

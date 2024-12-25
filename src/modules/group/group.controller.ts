@@ -11,12 +11,17 @@ export class GroupController {
     constructor(private readonly groupService: GroupService) {}
 
     @Post('create')
-    create(@Req() req: RequestWithUser, @Body() dto: CreateGroupDTO) {
-        return this.groupService.createGroup({ ...dto, initiator: req.doc.user });
+    create(@Req() { doc: { user } }: RequestWithUser, @Body() dto: CreateGroupDTO) {
+        return this.groupService.createGroup({ ...dto, initiator: user });
     }
 
     @Get(':id')
-    getGroup(@Req() req: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('invite') invite?: string) {
-        return this.groupService.getGroup({ groupId, initiator: req.doc.user, invite });
+    getGroup(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('invite') invite?: string) {
+        return this.groupService.getGroup({ groupId, initiator: user, invite });
+    }
+
+    @Get(':id/participants')
+    getParticipants(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('cursor') cursor?: string) {
+        return this.groupService.getParticipants({ groupId, cursor, initiator: user });
     }
 }
