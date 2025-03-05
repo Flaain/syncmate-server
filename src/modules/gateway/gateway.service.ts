@@ -7,11 +7,13 @@ import { CookiesService } from 'src/utils/services/cookies/cookies.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { PRESENCE, USER_EVENTS } from '../user/types';
 import { AuthService } from '../auth/auth.service';
-import { CONVERSATION_EVENTS, ConversationCreateParams, ConversationDeleteMessageParams, ConversationDeleteParams, ConversationEditMessageParams, ConversationMessageReadParams, ConversationSendMessageParams } from '../conversation/types';
+import { CONVERSATION_EVENTS, ConversationCreateParams, ConversationDeleteMessageParams, ConversationDeleteParams, ConversationEditMessageParams, ConversationMessageReadParams, ConversationSendMessageParams, GROUP_EVENTS } from '../conversation/types';
 import { FEED_EVENTS } from '../feed/types';
 import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
 import { OnEvent } from '@nestjs/event-emitter';
 import { UserService } from '../user/user.service';
+import { GroupService } from '../group/group.service';
+import { ParticipantService } from '../participant/participant.service';
 
 @WebSocketGateway({ cors: { origin: ['http://localhost:4173', 'http://localhost:5173', 'https://fchat-client.vercel.app'], credentials: true } })
 export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
@@ -22,6 +24,8 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     constructor(
         private readonly authService: AuthService,
         private readonly conversationService: ConversationService,
+        private readonly groupService: GroupService,
+        private readonly participantService: ParticipantService,
         private readonly userService: UserService,
         private readonly cookiesService: CookiesService
     ) {}
@@ -253,5 +257,40 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
             _id: conversationId,
             participant: { _id: client.data.user._id.toString() },
         }));
+    }
+
+    @SubscribeMessage(GROUP_EVENTS.JOIN)
+    async onJoinGroup(@MessageBody() { groupId }: { groupId: string }, @ConnectedSocket() client: SocketWithUser) {
+        const group = await this.groupService.findById(groupId, { projection: { _id: 1 } });
+
+        if (!group) throw new AppException({ message: 'Group not found' }, HttpStatus.NOT_FOUND);
+
+        if (
+            group.isPrivate &&
+            !(await this.participantService.findOne({
+                filter: { group: group._id, user: client.data.user._id },
+                projection: { _id: 1 },
+            }))
+        ) {
+            throw new AppException({ message: 'Cannot listen a private group events' }, HttpStatus.FORBIDDEN);
+        }
+
+        client.join(groupId);
+    }
+
+    @SubscribeMessage(GROUP_EVENTS.LEAVE)
+    onLeaveGroup(@MessageBody() { groupId }: { groupId: string }, @ConnectedSocket() client: SocketWithUser) {
+        client.leave(groupId);
+    }
+
+    @OnEvent(GROUP_EVENTS.MESSAGE_SEND)
+    onSendGroupMessage({ feedItem, initiator, session_id }: Omit<ConversationSendMessageParams, 'unreadMessages'>) {
+        (
+            this.sockets.get(initiator._id.toString()).find((socket) => socket.handshake.query.session_id === session_id) ??
+            this.server
+        )
+            .to(feedItem.item._id.toString())
+            .emit(GROUP_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
+
     }
 }

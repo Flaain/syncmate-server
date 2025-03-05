@@ -89,10 +89,23 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
             pipeline: [
                 {
                     $lookup: {
+                        from: 'participants',
+                        localField: 'participants',
+                        foreignField: '_id',
+                        as: 'me',
+                        pipeline: [
+                            { $match: { user: initiatorId } },
+                            { $project: { name: 1, avatar: 1, role: 1, createdAt: 1 } },
+                        ],
+                    },
+                },
+                {
+                    $lookup: {
                         from: 'messages',
                         localField: 'lastMessage',
                         foreignField: '_id',
                         as: 'lastMessage',
+                        let: { groupId: '$_id' },
                         pipeline: [
                             {
                                 $lookup: {
@@ -104,15 +117,12 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                                         {
                                             $lookup: {
                                                 from: 'participants',
-                                                let: { userId: '$user' },
+                                                let: { userId: '$_id' },
                                                 pipeline: [
                                                     {
                                                         $match: {
                                                             $expr: {
-                                                                $and: [
-                                                                    { $eq: ['$$userId', '$user'] },
-                                                                    { $eq: ['$$ROOT.item', '$group'] },
-                                                                ],
+                                                                $and: [{ $eq: ['$$userId', '$user'] }, { $eq: ['$$groupId', '$group'] }],
                                                             },
                                                         },
                                                     },
@@ -126,15 +136,18 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                                                         },
                                                     },
                                                     { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+                                                    { $project: { group: 0, user: 0, role: 0 } },
                                                 ],
                                                 as: 'participant',
                                             },
                                         },
                                         { $unwind: { path: '$participant', preserveNullAndEmptyArrays: true } },
+                                        { $project: { _id: 1, name: 1, participant: 1 } },
                                     ],
                                 },
                             },
                             { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
+                            { $project: { source: 0 } }
                         ],
                     },
                 },
@@ -147,31 +160,10 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                         pipeline: [{ $project: { _id: 1, url: 1 } }],
                     },
                 },
-                {
-                    $lookup: {
-                        from: 'participants',
-                        localField: 'owner',
-                        foreignField: '_id',
-                        as: 'owner',
-                        pipeline: [
-                            {
-                                $lookup: {
-                                    from: 'users',
-                                    localField: 'user',
-                                    foreignField: '_id',
-                                    as: 'user',
-                                    pipeline: [{ $project: { _id: 1, name: 1 } }],
-                                },
-                            },
-                            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
-                            { $project: { _id: 1, name: 1, user: 1 } }
-                        ]
-                    }
-                },
-                { $unwind: { path: '$owner', preserveNullAndEmptyArrays: true } },
+                { $unwind: { path: '$me', preserveNullAndEmptyArrays: true } },
                 { $unwind: { path: '$lastMessage', preserveNullAndEmptyArrays: true } },
                 { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-                { $project: { participants: 0, invites: 0, lastMessageSentAt: 0, messages: 0 } },
+                { $project: { participants: 0, invites: 0, lastMessageSentAt: 0, messages: 0, owner: 0 } },
             ],
         },
     },

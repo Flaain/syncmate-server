@@ -5,7 +5,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { UserDocument, UserSearchParams } from './types';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { Providers } from 'src/utils/types';
 import { UserStatusDTO } from './dtos/user.status.dto';
 import { UserNameDto } from './dtos/user.name.dto';
@@ -108,7 +108,7 @@ export class UserService extends BaseService<UserDocument, User> {
     };
 
     changeAvatar = async ({ initiator, file }: { initiator: UserDocument; file: Express.Multer.File }) => {
-        const key = `users/${initiator._id.toString()}/avatars/${process.env.NODE_ENV === 'dev'  ? Date.now() : crypto.randomUUID()}`;
+        const key = `users/${initiator._id.toString()}/avatars/${process.env.NODE_ENV === 'dev' ? Date.now() : crypto.randomUUID()}`;
         const url = `${process.env.BUCKET_PUBLIC_ENDPOINT}/${key}`
 
         await this.s3.send(new PutObjectCommand({
@@ -138,13 +138,13 @@ export class UserService extends BaseService<UserDocument, User> {
         isOfficial: user.isOfficial,
     })
 
-    getRecipient = async (recipientId: string | Types.ObjectId) => {
+    getRecipient = async (recipientId: string | Types.ObjectId, session?: ClientSession) => {
         const recipient = (await this.aggregate([
             { $match: { _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId } },
             { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
             { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
             { $project: recipientProjection },
-        ]))[0];
+        ], { session }))[0];
 
         if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
 

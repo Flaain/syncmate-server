@@ -7,7 +7,7 @@ export class BaseService<Doc extends Document, Entity> {
     constructor(private readonly model: Model<Doc>) {}
 
     countDocuments = (filter: RootFilterQuery<Doc>) => this.model.countDocuments(filter);
-    create = (body: Omit<Entity, '_id' | 'created'>) => this.model.create(body);
+    create = (body: Omit<Entity, '_id' | 'created'> | [Omit<Entity, '_id' | 'created'>], options?: any): any => this.model.create(body, options);
     total = ({ filter, projection, options }: FindQuery<Doc>) => this.model.find(filter, projection, options).countDocuments();
     findOne = ({ filter, projection, options }: FindQuery<Doc>) => this.model.findOne(filter, projection, options);
     insertMany = <T>(array: Array<T>, options?: InsertManyOptions) => this.model.insertMany(array, options);

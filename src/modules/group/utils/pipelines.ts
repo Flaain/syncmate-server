@@ -42,7 +42,7 @@ export const messageSenderPipeline = {
     },
 };
 
-export const getGroupPipeline = (groupId: string, initiatorId: Types.ObjectId): Array<PipelineStage> => [
+export const getGroupPipeline = (groupId: string, initiatorId: Types.ObjectId, cursor?: string): Array<PipelineStage> => [
     { $match: { _id: new Types.ObjectId(groupId) } },
     {
         $lookup: {
@@ -51,7 +51,7 @@ export const getGroupPipeline = (groupId: string, initiatorId: Types.ObjectId): 
             foreignField: '_id',
             as: 'me',
             pipeline: [
-                { $match: { user: initiatorId, group: new Types.ObjectId(groupId) } },
+                { $match: { user: initiatorId } },
                 { $project: { name: 1, avatar: 1, role: 1, createdAt: 1 } },
             ],
         },
@@ -64,6 +64,7 @@ export const getGroupPipeline = (groupId: string, initiatorId: Types.ObjectId): 
             as: 'm',
             let: { groupId: '$_id' },
             pipeline: [
+                { $match: cursor ? { _id: { $lt: new Types.ObjectId(cursor) } } : {} },
                 { $sort: { createdAt: -1 } },
                 { $limit: MESSAGES_BATCH },
                 messageSenderPipeline,
@@ -92,7 +93,7 @@ export const getGroupPipeline = (groupId: string, initiatorId: Types.ObjectId): 
         $addFields: {
             participants: { $size: '$participants' },
             messages: {
-                data: '$m',
+                data: { $reverseArray: '$m' },
                 nextCursor: {
                     $cond: {
                         if: { $eq: [{ $size: '$m' }, MESSAGES_BATCH] },

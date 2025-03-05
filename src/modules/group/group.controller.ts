@@ -24,4 +24,9 @@ export class GroupController {
     getParticipants(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('cursor') cursor?: string) {
         return this.groupService.getParticipants({ groupId, cursor, initiator: user });
     }
+
+    @Get(':id/previous-messages')
+    getPreviousMessages(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('cursor') cursor: string) {
+        return this.groupService.getPreviousMessages({ groupId, cursor, initiator: user });
+    }
 }

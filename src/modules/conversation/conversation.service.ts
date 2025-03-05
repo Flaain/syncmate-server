@@ -61,7 +61,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
             await session.abortTransaction();
             throw error;
         } finally {
-            session.endSession();
+            await session.endSession();
         }
     };
     
@@ -80,6 +80,6 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
 
         if (!conversation) throw new AppException({ message: "Cannot get previous messages" }, HttpStatus.NOT_FOUND);
 
-        return conversation;
+        return conversation.messages;
     }
 }

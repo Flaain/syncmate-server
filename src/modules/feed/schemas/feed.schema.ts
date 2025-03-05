@@ -16,9 +16,6 @@ export class Feed {
     @Prop({ type: String, enum: FEED_TYPE, required: true })
     type: FEED_TYPE;
 
-    @Prop({ type: Boolean, default: false })
-    archived?: boolean;
-
     @Prop({ type: Date })
     createdAt?: Date;
 

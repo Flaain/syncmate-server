@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Group } from './schemas/group.schema';
-import { Model, Types } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { UserService } from '../user/user.service';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { loginExistError } from '../auth/constants';
@@ -19,6 +19,7 @@ import { getGroupPipeline, getParticipantsPipeline } from './utils/pipelines';
 @Injectable()
 export class GroupService extends BaseService<GroupDocument, Group> {
     constructor(
+        @InjectConnection() private readonly connection: Connection,
         @InjectModel(Group.name) private readonly groupModel: Model<GroupDocument>,
         private readonly userService: UserService,
         private readonly participantService: ParticipantService,
@@ -28,49 +29,69 @@ export class GroupService extends BaseService<GroupDocument, Group> {
         super(groupModel);
     }
 
-    createGroup = async ({
-        login,
-        name,
-        initiator,
-        participants: dtoParticipants,
-    }: CreateGroupDTO & { initiator: UserDocument }) => {
+    createGroup = async ({ login, name, initiator, participants: dtoParticipants }: CreateGroupDTO & { initiator: UserDocument }) => {
         if ((await this.exists({ login })) || (await this.userService.exists({ login }))) {
             throw new AppException(loginExistError, HttpStatus.CONFLICT);
         }
 
-        const findedUsers = await this.userService.find({
-            filter: {
-                _id: { $in: dtoParticipants, $ne: initiator._id },
-                isDeleted: false,
-                isPrivate: false,
-            },
-            projection: { _id: 1 },
-        });
+        const session = await this.connection.startSession();
 
-        const group = await this.create({ login, name, owner: initiator._id });
-        const usersIds = [initiator._id, ...findedUsers.map((user) => user._id)];
-        const participants = await this.participantService.insertMany(
-            usersIds.map((_id, index) => ({
-                user: _id,
-                group: group._id,
-                role: !index ? ParticipantRole.OWNER : ParticipantRole.PARTICIPANT,
-            })),
-        );
+        session.startTransaction();
 
-        await Promise.all([
-            this.feedService.create({
-                item: group._id as Types.ObjectId,
-                type: FEED_TYPE.GROUP,
-                users: usersIds,
-                lastActionAt: new Date(),
-            }),
-            group.updateOne({
-                participants: participants.map((participant) => participant._id),
-                owner: participants[0]._id,
-            }),
-        ]);
+        try {
+            const findedUsers = await this.userService.find({
+                filter: {
+                    _id: { $in: dtoParticipants, $ne: initiator._id },
+                    isDeleted: false,
+                    isPrivate: false,
+                },
+                projection: { _id: 1 },
+                options: { session },
+            });
+    
+            const group: any = (await this.create([{ login, name, owner: initiator._id }], { session }))[0];
 
-        return { _id: group._id.toString() };
+            const usersIds = [initiator._id, ...findedUsers.map((user) => user._id)];
+            
+            const participants = await this.participantService.insertMany(
+                usersIds.map((_id, index) => ({
+                    user: _id,
+                    group: group._id,
+                    role: !index ? ParticipantRole.OWNER : ParticipantRole.PARTICIPANT,
+                })),
+                { session },
+            );
+    
+            await this.feedService.create(
+                [
+                    {
+                        item: group._id as Types.ObjectId,
+                        type: FEED_TYPE.GROUP,
+                        users: usersIds,
+                        lastActionAt: new Date(),
+                    },
+                ],
+                { session },
+            );
+
+            await group.updateOne(
+                {
+                    participants: participants.map((participant) => participant._id),
+                    owner: participants[0]._id,
+                },
+                { session },
+            );
+            
+            await session.commitTransaction();
+
+            return { _id: group._id.toString() };
+        } catch (error) {
+           await session.abortTransaction();
+
+            throw error;
+        } finally {
+           await session.endSession();
+        }
     };
 
     getGroup = async ({ initiator, groupId, invite }: { initiator: UserDocument; groupId: string; invite?: string }) => {
@@ -102,5 +123,13 @@ export class GroupService extends BaseService<GroupDocument, Group> {
         if (!me) throw new AppException({ message: 'Cannot get participants' }, HttpStatus.BAD_REQUEST);
 
         return participants;
+    }
+
+    getPreviousMessages = async ({ initiator, groupId, cursor }: { initiator: UserDocument; groupId: string; cursor: string }) => {
+        const group = (await this.aggregate(getGroupPipeline(groupId, initiator._id, cursor)))[0];
+
+        if (!group || (group.isPrivate && !group.me)) throw new AppException({ message: 'Cannot get previous messages' }, HttpStatus.NOT_FOUND);
+
+        return group.messages;
     }
 }
