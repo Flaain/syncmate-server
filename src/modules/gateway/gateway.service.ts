@@ -265,13 +265,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
 
         if (!group) throw new AppException({ message: 'Group not found' }, HttpStatus.NOT_FOUND);
 
-        if (
-            group.isPrivate &&
-            !(await this.participantService.findOne({
-                filter: { group: group._id, user: client.data.user._id },
-                projection: { _id: 1 },
-            }))
-        ) {
+        if (group.isPrivate && !(await this.participantService.exists({ group: group._id, user: client.data.user._id }))) {
             throw new AppException({ message: 'Cannot listen a private group events' }, HttpStatus.FORBIDDEN);
         }
 

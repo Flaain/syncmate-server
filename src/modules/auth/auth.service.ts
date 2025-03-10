@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Types } from 'mongoose';
+import { Connection, Types } from 'mongoose';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { WithUserAgent } from './types';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
@@ -19,10 +19,12 @@ import { SessionDocument } from '../session/types';
 import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
 import { defaultSuccessResponse } from 'src/utils/constants';
+import { InjectConnection } from '@nestjs/mongoose';
 
 @Injectable()
 export class AuthService {
     constructor(
+        @InjectConnection() private readonly connection: Connection,
         private readonly userService: UserService,
         private readonly jwtService: JwtService,
         private readonly configService: ConfigService,
@@ -60,21 +62,33 @@ export class AuthService {
     }
 
     signup = async ({ password, otp, userAgent, userIP, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     
-        if (await this.userService.findOne({ filter: { $or: [{ email: dto.email }, { login: dto.login }] } })) {
-            throw new AppException({ 
-                message: 'An error occurred during the registration process. Please try again.'
-            }, HttpStatus.BAD_REQUEST);
+        const session = await this.connection.startSession();
+        
+        session.startTransaction();
+        
+        try {
+            if (await this.userService.findOne({ filter: { $or: [{ email: dto.email }, { login: dto.login }] }, options: { session } })) {
+                throw new AppException({ message: 'An error occurred during the registration process. Please try again.' }, HttpStatus.BAD_REQUEST);
+            }
+    
+            if (!await this.otpService.findOneAndDelete({ otp, email: dto.email, type: OtpType.EMAIL_VERIFICATION }, { session })) {
+                throw new AppException(otpError, HttpStatus.BAD_REQUEST);
+            }
+    
+            const hashedPassword = await this.bcryptService.hashAsync(password);
+            const { password: _, ...restUser } = (await this.userService.create([{ ...dto, password: hashedPassword }], { session }))[0].toObject();
+            const s = await this.sessionService.create({ userId: restUser._id, userAgent, userIP });
+            
+            await session.commitTransaction();
+
+            return { user: restUser, ...this.signAuthTokens({ sessionId: s._id.toString(), userId: restUser._id.toString() }) };
+        } catch (error) {
+            await session.abortTransaction();
+
+            throw error;
+        } finally {
+            await session.endSession();
         }
-
-        if (!await this.otpService.findOneAndDelete({ otp, email: dto.email, type: OtpType.EMAIL_VERIFICATION })) {
-            throw new AppException(otpError, HttpStatus.BAD_REQUEST);
-        }
-
-        const hashedPassword = await this.bcryptService.hashAsync(password);
-        const { password: _, ...restUser } = (await this.userService.create({ ...dto, password: hashedPassword })).toObject();
-        const session = await this.sessionService.create({ userId: restUser._id, userAgent, userIP });
-
-        return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: restUser._id.toString() }) };
     };
 
     refresh = async (session: SessionDocument) => ({
@@ -85,22 +99,37 @@ export class AuthService {
     });
 
     reset = async ({ email, otp, password }: AuthResetDTO) => {
-        if (!await this.otpService.findOneAndDelete({ otp, email, type: OtpType.PASSWORD_RESET })) {
-            throw new AppException({ 
-                message: 'An error occurred during the password reset process. Please try again.',
-                errors: [{ message: 'Invalid OTP code', path: 'otp' }]
-             }, HttpStatus.BAD_REQUEST);
+        const session = await this.connection.startSession();
+
+        session.startTransaction();
+
+        try {
+            if (!await this.otpService.findOneAndDelete({ otp, email, type: OtpType.PASSWORD_RESET }, { session })) {
+                throw new AppException({ 
+                    message: 'An error occurred during the password reset process. Please try again.',
+                    errors: [{ message: 'Invalid OTP code', path: 'otp' }]
+                 }, HttpStatus.BAD_REQUEST);
+            }
+    
+            const user = await this.userService.findOne({ filter: { email, isDeleted: false }, options: { session } });
+    
+            if (!user) throw new AppException({ message: 'Something went wrong' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    
+            const hashedPassword = await this.bcryptService.hashAsync(password);
+    
+            await this.sessionService.deleteMany({ userId: user._id }, { session }); 
+            await user.updateOne({ password: hashedPassword }, { session });
+            
+            await session.commitTransaction();
+
+            return defaultSuccessResponse;
+        } catch (error) {
+            await session.abortTransaction();
+
+            throw error;
+        } finally {
+            await session.endSession();
         }
-
-        const user = await this.userService.findOne({ filter: { email, isDeleted: false } });
-
-        if (!user) throw new AppException({ message: 'Something went wrong' }, HttpStatus.INTERNAL_SERVER_ERROR);
-
-        const hashedPassword = await this.bcryptService.hashAsync(password);
-
-        await Promise.all([this.sessionService.deleteMany({ userId: user._id }), user.updateOne({ password: hashedPassword })])
-
-        return defaultSuccessResponse;
     }
 
     changePassword = async ({ initiator, ...dto }: z.infer<typeof authChangePasswordSchema> & { initiator: UserDocument }) => {
@@ -112,11 +141,22 @@ export class AuthService {
 
         if (parsedQuery.type === 'set') {
             const hashedPassword = await this.bcryptService.hashAsync(dto.newPassword);
-            
-            await Promise.all([
-                initiator.updateOne({ password: hashedPassword }),
-                this.sessionService.deleteMany({ userId: initiator._id }),
-            ]);
+            const session = await this.connection.startSession();
+
+            session.startTransaction();
+
+            try {
+                await initiator.updateOne({ password: hashedPassword }, { session });
+                await this.sessionService.deleteMany({ userId: initiator._id }, { session });
+                
+                await session.commitTransaction();
+            } catch (error) {
+                await session.abortTransaction();
+
+                throw error;
+            } finally {
+                await session.endSession();
+            }
         }
 
         return defaultSuccessResponse;

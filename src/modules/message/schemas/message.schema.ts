@@ -28,8 +28,8 @@ export class Message {
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Message' })
     forwardedFrom?: mongoose.Types.ObjectId;
 
-    @Prop({ required: true, default: false })
-    hasBeenRead?: boolean;
+    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] })
+    read_by?: Array<mongoose.Types.ObjectId>;
 
     @Prop({ required: true, default: false })
     hasBeenEdited?: boolean;

@@ -48,9 +48,9 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         const session = await this.connection.startSession();
 
-        session.startTransaction();
-
         try {
+            session.startTransaction();
+
             const recipient = await this.userService.getRecipient(recipientId, session);
     
             const ctx = { isNewConversation: false, conversation: null };
@@ -65,27 +65,26 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 if (recipient.isPrivate) throw new AppException({ message: 'Cannot send message' }, HttpStatus.NOT_FOUND);
     
                 ctx.isNewConversation = true;
-                ctx.conversation = await this.conversationService.create(
-                    [{ participants: [recipient._id, initiator._id] }],
-                    { session },
-                );
+                ctx.conversation = (await this.conversationService.create([{ participants: [recipient._id, initiator._id] }], { session }))[0];
             };
+
+            const newMessage = (
+                await this.create(
+                    [
+                        {
+                            sender: initiator._id,
+                            text: message.trim(),
+                            source: ctx.conversation._id,
+                            sourceRefPath: MessageSourceRefPath.CONVERSATION,
+                        },
+                    ],
+                    { session },
+                )
+            )[0];
     
-            const newMessage = (await this.create(
-                [
-                    {
-                        sender: initiator._id,
-                        text: message.trim(),
-                        source: ctx.conversation._id,
-                        sourceRefPath: MessageSourceRefPath.CONVERSATION,
-                    },
-                ],
-                { session },
-            ))[0];
-    
-            const { _id, type, lastActionAt } = await(
-                ctx.isNewConversation
-                    ? (this.feedService.create(
+            const { _id, type, lastActionAt } = ctx.isNewConversation
+                ? (
+                      await this.feedService.create(
                           [
                               {
                                   item: ctx.conversation._id,
@@ -95,25 +94,35 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                               },
                           ],
                           { session },
-                      ))[0]
-                    : this.feedService.findOneAndUpdate({
-                          filter: {
-                              item: ctx.conversation._id,
-                              users: { $in: [initiator._id, recipient._id] },
-                              type: FEED_TYPE.CONVERSATION,
-                          },
-                          update: { lastActionAt: newMessage.createdAt },
-                          options: { returnDocument: 'after', session },
-                      })
+                      )
+                  )[0]
+                : await this.feedService.findOneAndUpdate({
+                      filter: {
+                          item: ctx.conversation._id,
+                          users: { $in: [initiator._id, recipient._id] },
+                          type: FEED_TYPE.CONVERSATION,
+                      },
+                      update: { lastActionAt: newMessage.createdAt },
+                      options: { returnDocument: 'after', session },
+                  });
+
+            await ctx.conversation.updateOne(
+                {
+                    lastMessage: newMessage._id,
+                    lastMessageSentAt: newMessage.createdAt,
+                    $push: { messages: newMessage._id },
+                },
+                { session },
             );
     
-            await ctx.conversation.updateOne({
-                lastMessage: newMessage._id,
-                lastMessageSentAt: newMessage.createdAt,
-                $push: { messages: newMessage._id },
-            }, { session });
-    
-            const unreadMessages = await this.countDocuments({ hasBeenRead: false, source: ctx.conversation._id, sender: initiator._id });
+            const unreadMessages = await this.countDocuments(
+                {
+                    source: ctx.conversation._id,
+                    sender: initiator._id,
+                    read_by: { $nin: recipient._id },
+                },
+                { session },
+            );
             
             await session.commitTransaction();
 
@@ -127,7 +136,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                     item: {
                         _id: ctx.conversation._id,
                         lastMessage: {
-                            ...newMessage,
+                            ...newMessage.toObject(),
                             sender: {
                                 _id: initiator._id,
                                 name: initiator.name,
@@ -141,11 +150,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
             };
         } catch (error) {
-           await session.abortTransaction();
+            await session.abortTransaction();
 
-            throw error;
+            throw new AppException({ message: error.message }, HttpStatus.INTERNAL_SERVER_ERROR);
         } finally {
-           await session.endSession();
+            session.endSession();
         }
     };
 

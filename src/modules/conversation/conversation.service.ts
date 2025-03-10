@@ -72,11 +72,11 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         
         const conversation = (await this.aggregate(getConversationPipeline(initiator._id, recipient._id)))[0];
 
-        return { ...(conversation ?? {}), recipient, isInitiatorBlocked, isRecipientBlocked };
+        return { ...(conversation ?? { messages: { cursor: null, data: [] } }), recipient, isInitiatorBlocked, isRecipientBlocked };
     };
 
     getPreviousMessages = async ({ cursor, initiator, recipientId }: { cursor: string, initiator: UserDocument, recipientId: string }) => {        
-        const conversation = (await this.aggregate(getConversationPipeline(initiator._id, recipientId, cursor)))[0];
+        const conversation = (await this.aggregate(getConversationPipeline(initiator._id, new Types.ObjectId(recipientId), cursor)))[0];
 
         if (!conversation) throw new AppException({ message: "Cannot get previous messages" }, HttpStatus.NOT_FOUND);
 

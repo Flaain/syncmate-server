@@ -30,8 +30,7 @@ export class MessageController {
             initiator: user,
         });
 
-        isNewConversation &&
-            this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
+        isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
                 initiatorId: user._id.toString(),
                 recipientId: feedItem.item.recipient._id.toString(),
                 conversationId: feedItem.item._id.toString(),

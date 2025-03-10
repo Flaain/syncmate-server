@@ -13,7 +13,7 @@ export const messageSenderPipeline = {
             {
                 $lookup: {
                     from: 'participants',
-                    let: { userId: '$user' },
+                    let: { userId: '$_id' },
                     pipeline: [
                         {
                             $match: {
@@ -32,12 +32,23 @@ export const messageSenderPipeline = {
                             },
                         },
                         { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+                        { $project: { group: 0, user: 0 } },
                     ],
                     as: 'participant',
                 },
             },
+            {
+                $lookup: {
+                    from: 'files',
+                    localField: 'avatar',
+                    foreignField: '_id',
+                    as: 'avatar',
+                    pipeline: [{ $project: { _id: 1, url: 1 } }],
+                },
+            },
+            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
             { $unwind: { path: '$participant', preserveNullAndEmptyArrays: true } },
-            { $project: { name: 1, login: 1, isOfficial: 1, participant: 1 } },
+            { $project: { name: 1, login: 1, avatar: 1, isOfficial: 1, participant: 1 } },
         ],
     },
 };

@@ -42,7 +42,7 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
                         foreignField: '_id',
                         as: 'unreadMessages',
                         pipeline: [
-                            { $match: { hasBeenRead: false, sender: { $ne: initiatorId } } },
+                            { $match: { sender: { $ne: initiatorId }, read_by: { $nin: [initiatorId] } } },
                             { $count: 'unreadMessages' },
                         ],
                     },
