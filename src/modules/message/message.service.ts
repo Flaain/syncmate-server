@@ -152,14 +152,14 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         } catch (error) {
             await session.abortTransaction();
 
-            throw new AppException({ message: error.message }, HttpStatus.INTERNAL_SERVER_ERROR);
+            throw error;
         } finally {
             session.endSession();
         }
     };
 
     read = async ({ messageId, initiator, recipientId }: Pick<MessageReplyDTO, 'recipientId'> & { initiator: UserDocument, messageId: string }) => {
-        const message = await this.findOne({ filter: { _id: messageId, sender: recipientId, hasBeenRead: false } });
+        const message = await this.findOne({ filter: { _id: messageId, sender: { $ne: initiator._id }, read_by: { $nin: initiator._id } } });
 
         if (!message) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
 
@@ -174,7 +174,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         
         const readedAt = new Date();
         
-        await message.updateOne({ hasBeenRead: true, readedAt });
+        await message.updateOne({ readedAt, $push: { read_by: initiator._id } });
 
         return { conversationId: conversation._id.toString(), readedAt: readedAt.toISOString() };
     }
@@ -276,7 +276,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             throw error;
         } finally {
-           await session.endSession();
+           session.endSession();
         }
     }
 
@@ -414,7 +414,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             throw error;
         } finally {
-           await session.endSession();
+           session.endSession();
         }
     }
 
@@ -502,7 +502,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             throw error;
         } finally {
-            await session.endSession();
+            session.endSession();
         }
     }
 }

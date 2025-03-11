@@ -94,18 +94,13 @@ export class MessageController {
         @Body() { session_id, recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>,
         @Param('messageId', paramPipe) messageId: string,
     ) {
-        const { conversationId, readedAt } = await this.messageService.read({
-            messageId,
-            initiator: user,
-            recipientId,
-        });
+        const { conversationId, readedAt } = await this.messageService.read({ messageId, initiator: user, recipientId });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_READ, {
             conversationId,
             messageId,
             readedAt,
             recipientId,
-            session_id,
             initiatorId: user._id.toString(),
         });
 

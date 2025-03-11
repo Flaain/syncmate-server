@@ -135,9 +135,9 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_READ)
-    onMessageRead({ conversationId, messageId, initiatorId, readedAt, recipientId, session_id }: ConversationMessageReadParams) {
-        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, { _id: messageId, readedAt });
-        this.sockets.get(initiatorId)?.forEach((socket) => socket.emit(FEED_EVENTS.UNREAD_COUNTER, { itemId: conversationId, action: 'dec' }));
+    onMessageRead({ conversationId, messageId, initiatorId, readedAt, recipientId }: ConversationMessageReadParams) {
+        this.sockets.get(recipientId)?.forEach((socket) => socket.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, { _id: messageId, readedAt }));
+        this.sockets.get(initiatorId)?.forEach((socket) => socket.emit(FEED_EVENTS.UNREAD_COUNTER, { itemId: conversationId, action: 'dec', ctx: 'conversation' }));
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
