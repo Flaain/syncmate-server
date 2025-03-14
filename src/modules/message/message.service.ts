@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Message } from './schemas/message.schema';
 import { Connection, Model } from 'mongoose';
+import { MongoError, MongoErrorLabel } from 'mongodb';
 import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
 import { ConversationService } from '../conversation/conversation.service';
 import { AppException } from 'src/utils/exceptions/app.exception';
@@ -26,7 +27,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         private readonly userService: UserService,
         private readonly feedService: FeedService,
         private readonly groupService: GroupService,
-        private readonly participantService: ParticipantService
+        private readonly participantService: ParticipantService,
     ) {
         super(messageModel);
     }
@@ -41,9 +42,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             })
         )
             throw new AppException({ message: 'Messaging restricted' }, HttpStatus.BAD_REQUEST);
-    }
+    };
 
-    send = async ({ recipientId, message, initiator }: SendMessageParams) => {
+    send = async (dto: SendMessageParams) => {
+        const { message, initiator, recipientId } = dto;
+
         await this.isMessagingRestricted({ initiator, recipientId });
 
         const session = await this.connection.startSession();
@@ -52,21 +55,21 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             session.startTransaction();
 
             const recipient = await this.userService.getRecipient(recipientId, session);
-    
+
             const ctx = { isNewConversation: false, conversation: null };
-    
+
             ctx.conversation = await this.conversationService.findOne({
                 filter: { participants: { $all: [recipient._id, initiator._id] } },
                 projection: { _id: 1 },
-                options: { session }
+                options: { session },
             });
-            
+
             if (!ctx.conversation) {
                 if (recipient.isPrivate) throw new AppException({ message: 'Cannot send message' }, HttpStatus.NOT_FOUND);
-    
+
                 ctx.isNewConversation = true;
                 ctx.conversation = (await this.conversationService.create([{ participants: [recipient._id, initiator._id] }], { session }))[0];
-            };
+            }
 
             const newMessage = (
                 await this.create(
@@ -81,7 +84,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                     { session },
                 )
             )[0];
-    
+
             const { _id, type, lastActionAt } = ctx.isNewConversation
                 ? (
                       await this.feedService.create(
@@ -114,8 +117,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
                 { session },
             );
-    
-            const unreadMessages = await this.countDocuments(
+
+            const unread_recipient = await this.countDocuments(
                 {
                     source: ctx.conversation._id,
                     sender: initiator._id,
@@ -123,12 +126,22 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
                 { session },
             );
-            
-            await session.commitTransaction();
+
+            const unread_initiator = await this.countDocuments(
+                {
+                    source: ctx.conversation._id,
+                    sender: recipient._id,
+                    read_by: { $nin: initiator._id },
+                },
+                { session },
+            );
+
+            await BaseService.commitWithRetry(session);
 
             return {
                 isNewConversation: ctx.isNewConversation,
-                unreadMessages,
+                unread_recipient,
+                unread_initiator,
                 feedItem: {
                     _id,
                     type,
@@ -150,15 +163,20 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
             };
         } catch (error) {
-            await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                return this.send(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
             session.endSession();
         }
     };
 
-    read = async ({ messageId, initiator, recipientId }: Pick<MessageReplyDTO, 'recipientId'> & { initiator: UserDocument, messageId: string }) => {
+    read = async ({ messageId, initiator, recipientId }: Pick<MessageReplyDTO, 'recipientId'> & { initiator: UserDocument; messageId: string }) => {
         const message = await this.findOne({ filter: { _id: messageId, sender: { $ne: initiator._id }, read_by: { $nin: initiator._id } } });
 
         if (!message) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
@@ -171,22 +189,24 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         });
 
         if (!conversation) throw new AppException({ message: 'Cannot read message' }, HttpStatus.NOT_FOUND);
-        
+
         const readedAt = new Date();
-        
+
         await message.updateOne({ readedAt, $push: { read_by: initiator._id } });
 
         return { conversationId: conversation._id.toString(), readedAt: readedAt.toISOString() };
-    }
+    };
 
-    reply = async ({ messageId, recipientId, message, initiator }: MessageReplyDTO & { initiator: UserDocument, messageId: string }) => {
+    reply = async (dto: MessageReplyDTO & { initiator: UserDocument; messageId: string }) => {
+        const { recipientId, initiator, messageId, message } = dto;
+
         await this.isMessagingRestricted({ recipientId, initiator });
 
         const session = await this.connection.startSession();
 
-        session.startTransaction();
-        
         try {
+            session.startTransaction();
+            
             const recipient = await this.userService.findOne({
                 filter: { _id: recipientId, isDeleted: false },
                 projection: recipientProjection,
@@ -194,10 +214,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             });
 
             if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
-            
-            const replyMessage = await this.findById(messageId, {
-                options: { populate: { path: 'sender', model: 'User', select: '_id name' }, session },
-            });
+
+            const replyMessage = await this.findById(messageId, { options: { populate: { path: 'sender', model: 'User', select: '_id name' }, session } });
 
             if (!replyMessage) throw new AppException({ message: 'Cannot reply to a message that does not exist' }, HttpStatus.NOT_FOUND);
 
@@ -209,19 +227,21 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             if (!conversation) throw new AppException({ message: 'Conversation not found' }, HttpStatus.NOT_FOUND);
 
-            const newMessage = (await this.create(
-                [
-                    {
-                        sender: initiator._id,
-                        text: message.trim(),
-                        replyTo: replyMessage._id,
-                        source: conversation._id,
-                        sourceRefPath: MessageSourceRefPath.CONVERSATION,
-                        inReply: true,
-                    },
-                ],
-                { session },
-            ))[0];
+            const newMessage = (
+                await this.create(
+                    [
+                        {
+                            sender: initiator._id,
+                            text: message.trim(),
+                            replyTo: replyMessage._id,
+                            source: conversation._id,
+                            sourceRefPath: MessageSourceRefPath.CONVERSATION,
+                            inReply: true,
+                        },
+                    ],
+                    { session },
+                )
+            )[0];
 
             const { _id, type, lastActionAt } = await this.feedService.findOneAndUpdate({
                 filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION },
@@ -229,10 +249,13 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 options: { returnDocument: 'after', session },
             });
 
-            const unreadMessages = await this.countDocuments({ hasBeenRead: false, source: conversation._id, sender: initiator._id });
-            
+            const unreadMessages = await this.countDocuments(
+                { source: conversation._id, sender: initiator._id, read_by: { $nin: recipient._id } },
+                { session },
+            );
+
             await replyMessage.updateOne({ $push: { replies: newMessage._id } }, { session });
-            
+
             await conversation.updateOne(
                 {
                     lastMessage: newMessage._id,
@@ -242,7 +265,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 { session },
             );
 
-            await session.commitTransaction();
+            BaseService.commitWithRetry(session);
 
             return {
                 unreadMessages,
@@ -253,7 +276,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                     item: {
                         _id: conversation._id,
                         lastMessage: {
-                            ...newMessage,
+                            ...newMessage.toObject(),
                             replyTo: {
                                 _id: replyMessage._id,
                                 text: replyMessage.text,
@@ -272,13 +295,18 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
             };
         } catch (error) {
-           await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                return this.reply(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
-           session.endSession();
+            session.endSession();
         }
-    }
+    };
 
     edit = async ({ messageId, initiator, message: newMessage }: EditMessageParams) => {
         const message: any = await this.findOneAndUpdate({
@@ -307,8 +335,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             },
         });
 
-        if (!message) throw new AppException({ message: "Cannot edit message" }, HttpStatus.FORBIDDEN);
-        
+        if (!message) throw new AppException({ message: 'Cannot edit message' }, HttpStatus.FORBIDDEN);
+
         const { source, ...restMessage } = message.toObject();
 
         return {
@@ -320,29 +348,28 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                     email: initiator.email,
                     isOfficial: initiator.isOfficial,
                     avatar: initiator.avatar,
-                }
+                },
             },
-            conversationId: source._id.toString(),  
+            conversationId: source._id.toString(),
             isLastMessage: message._id.toString() === source.lastMessage._id.toString(),
-            recipientId: source.participants[0]._id.toString()
+            recipientId: source.participants[0]._id.toString(),
         };
     };
 
-    delete = async ({ messageIds, initiatorId, recipientId }: { messageIds: Array<string>, initiatorId: string, recipientId: string }) => {
+    delete = async (dto: { messageIds: Array<string>; initiatorId: string; recipientId: string }) => {
+        const { messageIds, initiatorId, recipientId } = dto;
+
         const session = await this.connection.startSession();
-        
-        session.startTransaction();
 
         try {
-            const messages = await this.find({
-                filter: { _id: { $in: messageIds }, sender: initiatorId },
-                options: { session },
-            });
+            session.startTransaction();
 
-            if (!messages.length) throw new AppException({ message: "Messages not found" }, HttpStatus.NOT_FOUND);
+            const messages = await this.find({ filter: { _id: { $in: messageIds }, sender: initiatorId }, options: { session } });
 
-            const findedMessageIds = messages.map(message => message._id.toString());
-            
+            if (!messages.length) throw new AppException({ message: 'Messages not found' }, HttpStatus.NOT_FOUND);
+
+            const findedMessageIds = messages.map((message) => message._id.toString());
+
             const conversation = await this.conversationService.findOneAndUpdate({
                 filter: {
                     participants: { $all: [initiatorId, recipientId] },
@@ -362,34 +389,21 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                         path: 'lastMessage',
                         model: 'Message',
                         select: 'sender text',
-                    }
-                }
-            });
-            
-            if (!conversation) throw new AppException({ message: "Conversation not found" }, HttpStatus.NOT_FOUND);
-
-            const isLastMessage = findedMessageIds.includes(conversation.lastMessage._id.toString());
-            
-            const lastMessage = isLastMessage ? conversation.messages.length ? await this.findById(conversation.messages[0]._id, {
-                options: {
-                    session,
-                    populate: {
-                        path: 'sender',
-                        model: 'User',
-                        select: 'name',
                     },
                 },
-            }) : null : conversation.lastMessage;
+            });
 
+            if (!conversation) throw new AppException({ message: 'Conversation not found' }, HttpStatus.NOT_FOUND);
+
+            const isLastMessage = findedMessageIds.includes(conversation.lastMessage._id.toString());
+            const params = { options: { session, populate: { path: 'sender', model: 'User', select: 'name' } } };
+
+            const lastMessage = isLastMessage ? conversation.messages.length ? await this.findById(conversation.messages[0]._id, params) : null : conversation.lastMessage;
             const lastMessageSentAt = 'createdAt' in lastMessage ? lastMessage.createdAt : conversation.createdAt;
 
             await this.deleteMany({ _id: { $in: findedMessageIds }, sender: initiatorId }, { session });
 
-            const unreadMessages = await this.countDocuments({
-                hasBeenRead: false,
-                source: conversation._id,
-                sender: initiatorId,
-            });
+            const unreadMessages = await this.countDocuments({ source: conversation._id, sender: initiatorId, read_by: { $nin: recipientId } });
 
             isLastMessage && (await conversation.updateOne({ lastMessage, lastMessageSentAt }, { session }));
 
@@ -399,7 +413,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 options: { session },
             });
 
-            await session.commitTransaction();
+            BaseService.commitWithRetry(session);
 
             return {
                 unreadMessages,
@@ -407,31 +421,43 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 isLastMessage,
                 lastMessage,
                 lastMessageSentAt,
-                conversationId: conversation._id.toString()
-            }
+                conversationId: conversation._id.toString(),
+            };
         } catch (error) {
-           await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                
+                return this.delete(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
-           session.endSession();
+            session.endSession();
         }
-    }
+    };
 
-    sendGroupMessage = async ({ initiator, message, groupId }: Omit<SendMessageParams, 'recipientId' | 'session_id'> & { groupId: string }) => {
+    sendGroupMessage = async (dto: Omit<SendMessageParams, 'recipientId' | 'session_id'> & { groupId: string }) => {
+        const { groupId, message, initiator } = dto;
+
         const session = await this.connection.startSession();
 
-        session.startTransaction();
-
         try {
-            const participant = await this.participantService.findOne({ 
+            session.startTransaction();
+
+            const participant = await this.participantService.findOne({
                 filter: { user: initiator._id, group: groupId },
                 projection: { group: 0, user: 0 },
-                options: { session }, 
+                options: { session },
             });
 
-            if (!participant) throw new AppException({ message: "Cannot send message to group you are not a participant" }, HttpStatus.FORBIDDEN);
-    
+            if (!participant)
+                throw new AppException(
+                    { message: 'Cannot send message to group you are not a participant' },
+                    HttpStatus.FORBIDDEN,
+                );
+
             const group: any = await this.groupService.findById(groupId, {
                 options: {
                     populate: {
@@ -442,27 +468,29 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                     session,
                 },
             });
-    
-            if (!group) throw new AppException({ message: "Group not found" }, HttpStatus.NOT_FOUND); // not necessary but for safety
 
-            const newMessage = (await this.create(
-                [
-                    {
-                        sender: initiator._id,
-                        text: message.trim(),
-                        source: group._id,
-                        sourceRefPath: MessageSourceRefPath.GROUP,
-                    },
-                ],
-                { session },
-            ))[0];
-    
+            if (!group) throw new AppException({ message: 'Group not found' }, HttpStatus.NOT_FOUND); // not necessary but for safety
+
+            const newMessage = (
+                await this.create(
+                    [
+                        {
+                            sender: initiator._id,
+                            text: message.trim(),
+                            source: group._id,
+                            sourceRefPath: MessageSourceRefPath.GROUP,
+                        },
+                    ],
+                    { session },
+                )
+            )[0];
+
             const { _id, type, lastActionAt } = await this.feedService.findOneAndUpdate({
                 filter: { item: group._id, type: FEED_TYPE.GROUP },
                 update: { lastActionAt: newMessage.createdAt },
-                options: { returnDocument: 'after', session }
+                options: { returnDocument: 'after', session },
             });
-        
+
             await group.updateOne(
                 {
                     lastMessage: newMessage._id,
@@ -472,7 +500,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 { session },
             );
 
-            await session.commitTransaction();
+            BaseService.commitWithRetry(session);
 
             return {
                 _id,
@@ -498,11 +526,16 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 },
             };
         } catch (error) {
-            await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                return this.sendGroupMessage(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
             session.endSession();
         }
-    }
+    };
 }

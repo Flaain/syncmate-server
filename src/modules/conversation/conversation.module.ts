@@ -10,6 +10,8 @@ import { FeedModule } from '../feed/feed.module';
 import { AuthModule } from '../auth/auth.module';
 import { MessageModule } from '../message/message.module';
 import { BlockList, BlockListSchema } from '../user/schemas/user.blocklist.schema';
+import { GatewayModule } from '../gateway/gateway.module';
+import { ConversationGateway } from './conversation.gateway';
 
 @Module({
     imports: [
@@ -21,10 +23,11 @@ import { BlockList, BlockListSchema } from '../user/schemas/user.blocklist.schem
             { name: User.name, schema: UserSchema },
             { name: BlockList.name, schema: BlockListSchema },
         ]),
+        forwardRef(() => GatewayModule),
         forwardRef(() => AuthModule),
         forwardRef(() => MessageModule),
     ],
-    providers: [ConversationService],
+    providers: [ConversationService, ConversationGateway],
     controllers: [ConversationController],
     exports: [ConversationService],
 })

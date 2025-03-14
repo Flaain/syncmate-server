@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Group } from './schemas/group.schema';
 import { Connection, Model, Types } from 'mongoose';
+import { MongoError, MongoErrorLabel } from 'mongodb';
 import { UserService } from '../user/user.service';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { loginExistError } from '../auth/constants';
@@ -29,7 +30,9 @@ export class GroupService extends BaseService<GroupDocument, Group> {
         super(groupModel);
     }
 
-    createGroup = async ({ login, name, initiator, participants: dtoParticipants }: CreateGroupDTO & { initiator: UserDocument }) => {
+    createGroup = async (dto: CreateGroupDTO & { initiator: UserDocument }) => {
+        const { initiator, participants: dtoParticipants, name, login } = dto;
+
         if ((await this.exists({ login })) || (await this.userService.exists({ login }))) {
             throw new AppException(loginExistError, HttpStatus.CONFLICT);
         }
@@ -82,15 +85,21 @@ export class GroupService extends BaseService<GroupDocument, Group> {
                 { session },
             );
             
-            await session.commitTransaction();
+            BaseService.commitWithRetry(session);
 
             return { _id: group._id.toString() };
         } catch (error) {
-           await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                
+                return this.createGroup(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
-           await session.endSession();
+            session.endSession();
         }
     };
 

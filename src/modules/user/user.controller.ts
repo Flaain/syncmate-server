@@ -12,14 +12,14 @@ import { CONVERSATION_EVENTS } from '../conversation/types';
 import { paramPipe } from 'src/utils/constants';
 import { Auth } from '../auth/decorators/auth.decorator';
 
-@Auth()
 @Controller(Routes.USER)
 export class UserController {
     constructor(
         private readonly userService: UserService,
         private readonly eventEmitter: EventEmitter2,
     ) {}
-
+    
+    @Auth()
     @Get('search')
     search(@Req() req: RequestWithUser, @Pagination() params: IPagination) {
         return this.userService.search({ initiatorId: req.doc.user._id, ...params });
@@ -31,16 +31,19 @@ export class UserController {
         return this.userService.check({ type, email, login });
     }
 
+    @Auth()
     @Post('status')
     status(@Req() req: RequestWithUser, @Body() { status }: UserStatusDTO) {
         return this.userService.status({ initiator: req.doc.user, status });
     }
 
+    @Auth()
     @Post('name')
     name(@Req() req: RequestWithUser, @Body() { name }: UserNameDto) {
         return this.userService.name({ initiator: req.doc.user, name });
     }
 
+    @Auth()
     @Post('block/:id')
     async block(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {
         const { recipientId } = await this.userService.block({ initiator: req.doc.user, recipientId: id });
@@ -50,6 +53,7 @@ export class UserController {
         return { recipientId };
     }
 
+    @Auth()
     @Post('unblock/:id')
     async unblock(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {
         const { recipientId } = await this.userService.unblock({ initiator: req.doc.user, recipientId: id });
@@ -59,6 +63,7 @@ export class UserController {
         return { recipientId };
     }
 
+    @Auth()
     @Post('avatar')
     @UseInterceptors(FileInterceptor('image'))
     avatar(@Req() req: RequestWithUser, @UploadedFile(filePipe) file: Express.Multer.File) {

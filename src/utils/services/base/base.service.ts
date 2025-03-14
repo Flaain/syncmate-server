@@ -1,10 +1,35 @@
 import { Injectable } from '@nestjs/common';
-import { AggregateOptions, Document, FilterQuery, InsertManyOptions, Model, MongooseBaseQueryOptions, PipelineStage, QueryOptions, RootFilterQuery, Types } from 'mongoose';
+import { MongoError, MongoErrorLabel } from 'mongodb';
 import { FindQuery, UpdateQuery } from 'src/utils/types';
+import {
+    AggregateOptions,
+    ClientSession,
+    Document,
+    FilterQuery,
+    InsertManyOptions,
+    Model,
+    MongooseBaseQueryOptions,
+    PipelineStage,
+    QueryOptions,
+    RootFilterQuery,
+    Types,
+} from 'mongoose';
 
 @Injectable()
 export class BaseService<Doc extends Document, Entity> {
     constructor(private readonly model: Model<Doc>) {}
+
+    static commitWithRetry = async (session: ClientSession) => {
+        try {
+            await session.commitTransaction();
+        } catch (error) {
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.UnknownTransactionCommitResult)) {
+                await BaseService.commitWithRetry(session);
+            } else {
+                throw error;
+            }
+        }
+    };
 
     countDocuments = (filter: RootFilterQuery<Doc>, options?: any) => this.model.countDocuments(filter, options);
     create = (body: Omit<Entity, '_id' | 'created'> | [Omit<Entity, '_id' | 'created'>], options?: any): any => this.model.create(body, options);

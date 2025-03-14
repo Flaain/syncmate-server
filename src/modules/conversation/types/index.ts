@@ -45,11 +45,14 @@ export interface ConversationSendMessageParams {
     initiator: UserDocument;
     feedItem: FeedWrapper<ConversationFeed>;
     session_id: string;
-    unreadMessages: number;
+    unread_initiator: number;
+    unread_recipient: number;
 }
 
 export interface ConversationEditMessageParams {
-    message: Message;
+    _id: string;
+    text: string;
+    updatedAt: Date;
     isLastMessage: boolean;
     conversationId: string;
     recipientId: string;

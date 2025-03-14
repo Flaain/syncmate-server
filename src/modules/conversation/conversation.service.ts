@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
+import { MongoError, MongoErrorLabel } from 'mongodb';
 import { Conversation } from './schemas/conversation.schema';
 import { ConversationDocument } from './types';
 import { AppException } from 'src/utils/exceptions/app.exception';
@@ -28,7 +29,8 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         super(conversationModel);
     }
 
-    deleteConversation = async ({ initiatorId, recipientId }: { initiatorId: Types.ObjectId; recipientId: string }) => {
+    deleteConversation = async (dto: { initiatorId: Types.ObjectId; recipientId: string }) => {
+        const { initiatorId, recipientId } = dto;
         const session = await this.connection.startSession();
         
         session.startTransaction();
@@ -54,12 +56,19 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
             // as mongoose docs says - "Running operations in parallel is not supported during a transaction" so i can't use Promise.all
             // https://mongoosejs.com/docs/transactions.html#note-about-parallelism-in-transactions 
 
-            await session.commitTransaction();
+            BaseService.commitWithRetry(session);
 
             return { _id: conversation._id, recipientId: recipient._id.toString() };
         } catch (error) {
-            await session.abortTransaction();
-            throw error;
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                
+                return this.deleteConversation(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
+
+                throw error;
+            }
         } finally {
             await session.endSession();
         }

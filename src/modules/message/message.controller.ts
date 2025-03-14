@@ -24,7 +24,7 @@ export class MessageController {
         @Body() dto: MessageSendDTO,
         @Param('recipientId', paramPipe) recipientId: string,
     ) {
-        const { feedItem, unreadMessages, isNewConversation } = await this.messageService.send({
+        const { feedItem, unread_initiator, unread_recipient, isNewConversation } = await this.messageService.send({
             ...dto,
             recipientId,
             initiator: user,
@@ -38,7 +38,8 @@ export class MessageController {
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
             feedItem,
-            unreadMessages,
+            unread_initiator, 
+            unread_recipient,
             initiator: user,
             session_id: dto.session_id,
         });

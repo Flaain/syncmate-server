@@ -1,7 +1,11 @@
 import { PipelineStage, Types } from 'mongoose';
 import { MESSAGES_BATCH } from '../constants';
 
-export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId: Types.ObjectId, cursor?: string): Array<PipelineStage> => [
+export const getConversationPipeline = (
+    initiatorId: Types.ObjectId,
+    recipientId: Types.ObjectId,
+    cursor?: string,
+): Array<PipelineStage> => [
     { $match: { participants: { $all: [initiatorId, recipientId] } } },
     {
         $lookup: {
@@ -55,10 +59,28 @@ export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId
                         ],
                     },
                 },
+                { $unwind: { path: '$attachments', preserveNullAndEmptyArrays: true } },
                 { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
                 { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
-                { $addFields: { test: 'asd' } },
-                { $project: { source: 0 } },
+                {
+                    $addFields: {
+                        hasBeenRead: {
+                            $cond: {
+                                if: { $and: [{ $eq: ['$sender._id', initiatorId] }, { $in: [recipientId, '$read_by'] }] },
+                                then: true,
+                                else: '$$REMOVE',
+                            },
+                        },
+                        alreadyRead: {
+                            $cond: {
+                                if: { $and: [{ $eq: ['$sender._id', recipientId] }, { $in: [initiatorId, '$read_by'] }] },
+                                then: true,
+                                else: '$$REMOVE',
+                            },
+                        },
+                    },
+                },
+                { $project: { source: 0, read_by: 0, replies: 0 } },
             ],
         },
     },
@@ -78,7 +100,7 @@ export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId
         },
     },
     { $unset: 'm' },
-    { $project: { messages: 1 } }
+    { $project: { messages: 1 } },
 ];
 
 export const isBlockedPipeline = (initiatorId: Types.ObjectId, recipientId: Types.ObjectId) => [
