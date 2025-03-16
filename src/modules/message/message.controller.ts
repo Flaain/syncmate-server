@@ -31,10 +31,10 @@ export class MessageController {
         });
 
         isNewConversation && this.eventEmitter.emit(CONVERSATION_EVENTS.CREATED, {
-                initiatorId: user._id.toString(),
-                recipientId: feedItem.item.recipient._id.toString(),
-                conversationId: feedItem.item._id.toString(),
-            });
+            initiatorId: user._id.toString(),
+            recipientId: feedItem.item.recipient._id.toString(),
+            conversationId: feedItem.item._id.toString(),
+        });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
             feedItem,
@@ -53,10 +53,11 @@ export class MessageController {
         @Body() dto: MessageReplyDTO,
         @Param('messageId', paramPipe) messageId: string,
     ) {
-        const { feedItem, unreadMessages } = await this.messageService.reply({ ...dto, messageId, initiator: user });
+        const { feedItem, unread_initiator, unread_recipient, } = await this.messageService.reply({ ...dto, messageId, initiator: user });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
-            unreadMessages,
+            unread_initiator,
+            unread_recipient,
             initiator: user,
             feedItem,
             session_id: dto.session_id,
@@ -78,7 +79,9 @@ export class MessageController {
         });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_EDIT, {
-            message,
+            _id: message._id,
+            text: message.text,
+            updatedAt: message.updatedAt,
             isLastMessage,
             conversationId,
             recipientId,

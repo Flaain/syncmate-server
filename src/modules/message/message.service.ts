@@ -249,8 +249,13 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 options: { returnDocument: 'after', session },
             });
 
-            const unreadMessages = await this.countDocuments(
+            const unread_recipient = await this.countDocuments(
                 { source: conversation._id, sender: initiator._id, read_by: { $nin: recipient._id } },
+                { session },
+            );
+
+            const unread_initiator = await this.countDocuments(
+                { source: conversation._id, sender: recipient._id, read_by: { $nin: initiator._id } },
                 { session },
             );
 
@@ -265,10 +270,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 { session },
             );
 
-            BaseService.commitWithRetry(session);
+            await BaseService.commitWithRetry(session);
 
             return {
-                unreadMessages,
+                unread_initiator,
+                unread_recipient,
                 feedItem: {
                     _id,
                     type,
@@ -413,7 +419,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 options: { session },
             });
 
-            BaseService.commitWithRetry(session);
+            await BaseService.commitWithRetry(session);
 
             return {
                 unreadMessages,
@@ -500,7 +506,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 { session },
             );
 
-            BaseService.commitWithRetry(session);
+            await BaseService.commitWithRetry(session);
 
             return {
                 _id,
@@ -528,6 +534,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         } catch (error) {
             if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
                 await session.abortTransaction();
+                
                 return this.sendGroupMessage(dto);
             } else {
                 !session.transaction.isCommitted && await session.abortTransaction();
