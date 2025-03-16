@@ -76,12 +76,11 @@ export class ConversationGateway {
                     ...feedItem,
                     item: {
                         ...feedItem.item,
+                        ...(!isInitiator && { participantsTyping: [] }), // reset typing status for recipient sockets
                         unreadMessages: isInitiator ? unread_initiator : unread_recipient,
                         recipient: isInitiator ? feedItem.item.recipient : this.userService.toRecipient(initiator),
                     },
                 });
-
-                !isInitiator && socket.emit(FEED_EVENTS.STOP_TYPING, { _id: feedItem._id, participant: { _id: initiatorId } }); 
             }
         }
     }
@@ -165,7 +164,7 @@ export class ConversationGateway {
         @MessageBody() { conversationId, recipientId }: { conversationId: string; recipientId: string },
         @ConnectedSocket() client: SocketWithUser,
     ) {
-        if (!(await this.conversationService.exists({ _id: conversationId, participants: { $all: [client.data.user._id, recipientId] } }))) return;
+        // if (!(await this.conversationService.exists({ _id: conversationId, participants: { $all: [client.data.user._id, recipientId] } }))) return;
 
         const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
 
