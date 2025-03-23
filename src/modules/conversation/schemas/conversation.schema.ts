@@ -3,7 +3,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
 @Schema({ timestamps: true })
 export class Conversation {
-    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', index: { unique: true } }] })
+    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }] })
     participants: Array<mongoose.Types.ObjectId>;
 
     @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Message' }] })
