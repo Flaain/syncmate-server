@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Message } from './schemas/message.schema';
-import { Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
 import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
 import { ConversationService } from '../conversation/conversation.service';
@@ -13,7 +13,6 @@ import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { FeedService } from '../feed/feed.service';
 import { FEED_TYPE } from '../feed/types';
 import { BlockList } from '../user/schemas/user.blocklist.schema';
-import { recipientProjection } from '../conversation/constants';
 import { GroupService } from '../group/group.service';
 import { ParticipantService } from '../participant/participant.service';
 
@@ -33,19 +32,24 @@ export class MessageService extends BaseService<MessageDocument, Message> {
     }
 
     private isMessagingRestricted = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
-        const isMessagingRestricted = await this.blocklistModel.findOne(
-            {
+        if (
+            await this.blocklistModel.exists({
                 $or: [
                     { user: new Types.ObjectId(recipientId), blockList: { $in: initiator._id } },
                     { user: initiator._id, blockList: { $in: recipientId } },
                 ],
-            },
-            { _id: 1 },
-            { limit: 1 },
-        );
-
-        if (isMessagingRestricted) throw new AppException({ message: 'Messaging is restricted' }, HttpStatus.FORBIDDEN);
+            })
+        )
+            throw new AppException({ message: 'Messaging is restricted' }, HttpStatus.FORBIDDEN);
     };
+
+    private getUnreadMessagesForConversationParticipants = (source: Types.ObjectId, session?: ClientSession) => this.aggregate(
+        [
+            { $match: { source, read_by: { $size: 0 } } }, 
+            { $group: { _id: '$sender', count: { $sum: 1 } } }
+        ], 
+        { session }
+    );
 
     send = async (dto: SendMessageParams) => {
         const { message, initiator, recipientId } = dto;
@@ -117,13 +121,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 { session },
             );
 
-            const unread = await this.aggregate(
-                [
-                    { $match: { source: ctx.conversation._id, read_by: { $size: 0 } } },
-                    { $group: { _id: '$sender', count: { $sum: 1 } } },
-                ],
-                { session },
-            );
+            const unread = await this.getUnreadMessagesForConversationParticipants(ctx.conversation._id, session);
 
             await BaseService.commitWithRetry(session);
 
@@ -156,7 +154,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 await session.abortTransaction();
                 return this.send(dto);
             } else {
-                !session.transaction.isCommitted && await session.abortTransaction();
+                !session.transaction.isCommitted && (await session.abortTransaction());
 
                 throw error;
             }
@@ -195,15 +193,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
         try {
             session.startTransaction();
-            
-            const recipient = await this.userService.findOne({
-                filter: { _id: recipientId, isDeleted: false },
-                projection: recipientProjection,
-                options: { session },
-            });
 
-            if (!recipient) throw new AppException({ message: 'User not found' }, HttpStatus.NOT_FOUND);
-
+            const recipient = await this.userService.getRecipient(recipientId, session);
             const replyMessage = await this.findById(messageId, { options: { populate: { path: 'sender', model: 'User', select: '_id name' }, session } });
 
             if (!replyMessage) throw new AppException({ message: 'Cannot reply to a message that does not exist' }, HttpStatus.NOT_FOUND);
@@ -238,15 +229,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 options: { returnDocument: 'after', session },
             });
 
-            const unread_recipient = await this.countDocuments(
-                { source: conversation._id, sender: initiator._id, read_by: { $nin: recipient._id } },
-                { session },
-            );
-
-            const unread_initiator = await this.countDocuments(
-                { source: conversation._id, sender: recipient._id, read_by: { $nin: initiator._id } },
-                { session },
-            );
+            const unread = await this.getUnreadMessagesForConversationParticipants(conversation._id, session);
 
             await replyMessage.updateOne({ $push: { replies: newMessage._id } }, { session });
 
@@ -262,8 +245,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             await BaseService.commitWithRetry(session);
 
             return {
-                unread_initiator,
-                unread_recipient,
+                unread_recipient: unread.find(({ _id }) => _id.toString() === initiator._id.toString())?.count,
+                unread_initiator: unread.find(({ _id }) => _id.toString() === recipient._id.toString())?.count,
                 feedItem: {
                     _id,
                     type,
@@ -294,7 +277,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 await session.abortTransaction();
                 return this.reply(dto);
             } else {
-                !session.transaction.isCommitted && await session.abortTransaction();
+                !session.transaction.isCommitted && (await session.abortTransaction());
 
                 throw error;
             }
@@ -421,10 +404,10 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         } catch (error) {
             if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
                 await session.abortTransaction();
-                
+
                 return this.delete(dto);
             } else {
-                !session.transaction.isCommitted && await session.abortTransaction();
+                !session.transaction.isCommitted && (await session.abortTransaction());
 
                 throw error;
             }
@@ -523,10 +506,10 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         } catch (error) {
             if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
                 await session.abortTransaction();
-                
+
                 return this.sendGroupMessage(dto);
             } else {
-                !session.transaction.isCommitted && await session.abortTransaction();
+                !session.transaction.isCommitted && (await session.abortTransaction());
 
                 throw error;
             }
