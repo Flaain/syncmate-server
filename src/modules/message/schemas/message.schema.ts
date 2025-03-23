@@ -1,19 +1,16 @@
 import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { MessageSenderRefPath, MessageSourceRefPath } from '../types';
+import { MessageSourceRefPath } from '../types';
 
 @Schema({ timestamps: true })
 export class Message {
-    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'senderRefPath' })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, index: true, required: true, ref: 'User' })
     sender: mongoose.Types.ObjectId;
-
-    @Prop({ type: String, enum: MessageSenderRefPath, required: true })
-    senderRefPath: MessageSenderRefPath;
 
     @Prop({ type: String, required: true })
     text: string;
 
-    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'sourceRefPath' })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, index: true, refPath: 'sourceRefPath' })
     source: mongoose.Types.ObjectId;
 
     @Prop({ type: String, enum: MessageSourceRefPath, required: true })
@@ -31,8 +28,8 @@ export class Message {
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Message' })
     forwardedFrom?: mongoose.Types.ObjectId;
 
-    @Prop({ required: true, default: false })
-    hasBeenRead?: boolean;
+    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] })
+    read_by?: Array<mongoose.Types.ObjectId>;
 
     @Prop({ required: true, default: false })
     hasBeenEdited?: boolean;
@@ -40,6 +37,9 @@ export class Message {
     @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'File' }] })
     attachments?: Array<mongoose.Types.ObjectId>;
     
+    @Prop({ type: Date })
+    readedAt?: Date;
+
     @Prop({ type: Date })
     createdAt?: Date;
 

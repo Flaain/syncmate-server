@@ -9,6 +9,14 @@ import { cookieParser } from './utils/middlewares/cookieParser';
 
 (async () => {
     try {
+        process.on('uncaughtException', (err) => {
+            console.error('🔥 Uncaught Exception:', err);
+        });
+        
+        process.on('unhandledRejection', (reason) => {
+            console.error('🔥 Unhandled Rejection:', reason);
+        });
+
         const PORT = 3000;
 
         const app = await NestFactory.create<NestExpressApplication>(AppModule, {

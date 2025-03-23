@@ -3,7 +3,6 @@ export const recipientProjection = {
     _id: 1,
     name: 1,
     login: 1,
-    email: 1,
     avatar: 1,
     isOfficial: 1,
     isPrivate: 1,

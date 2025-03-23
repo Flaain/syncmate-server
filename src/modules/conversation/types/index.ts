@@ -18,12 +18,22 @@ export enum CONVERSATION_EVENTS {
     USER_BLOCK = 'conversation.user.block',
     USER_UNBLOCK = 'conversation.user.unblock',
     START_TYPING = 'conversation.start.typing',
-    STOP_TYPING = 'conversation.stop.typing'
+    STOP_TYPING = 'conversation.stop.typing',
+}
+
+export enum GROUP_EVENTS {
+    JOIN = 'group.join',
+    LEAVE = 'group.leave',
+    MESSAGE_READ = 'group.message.read',
+    MESSAGE_SEND = 'group.message.send',
+    MESSAGE_EDIT = 'group.message.edit',
+    MESSAGE_DELETE = 'group.message.delete',
 }
 
 export interface ConversationDeleteMessageParams {
     findedMessageIds: Array<string>;
     conversationId: string;
+    unreadMessages: number;
     initiatorId: string;
     recipientId: string;
     isLastMessage: boolean;
@@ -35,14 +45,27 @@ export interface ConversationSendMessageParams {
     initiator: UserDocument;
     feedItem: FeedWrapper<ConversationFeed>;
     session_id: string;
+    unread_initiator: number;
+    unread_recipient: number;
 }
 
 export interface ConversationEditMessageParams {
-    message: Message;
+    _id: string;
+    text: string;
+    updatedAt: Date;
     isLastMessage: boolean;
     conversationId: string;
     recipientId: string;
     initiatorId: string;
+    session_id: string;
+}
+
+export interface ConversationMessageReadParams {
+    conversationId: string;
+    readedAt: string;
+    messageId: string;
+    initiatorId: string;
+    recipientId: string;
     session_id: string;
 }
 

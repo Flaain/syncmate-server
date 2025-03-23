@@ -1,29 +1,42 @@
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import { ChangeUserStatusParams, SocketWithUser} from './types';
-import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { HttpStatus } from '@nestjs/common';
 import { CookiesService } from 'src/utils/services/cookies/cookies.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { PRESENCE, USER_EVENTS } from '../user/types';
 import { AuthService } from '../auth/auth.service';
-import { CONVERSATION_EVENTS, ConversationCreateParams, ConversationDeleteMessageParams, ConversationDeleteParams, ConversationEditMessageParams, ConversationSendMessageParams } from '../conversation/types';
 import { FEED_EVENTS } from '../feed/types';
 import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
-import { OnEvent } from '@nestjs/event-emitter';
-import { UserService } from '../user/user.service';
-import { toRecipient } from '../conversation/utils/toRecipient';
+import { CONVERSATION_EVENTS } from '../conversation/types';
+import {
+    ConnectedSocket,
+    GatewayMetadata,
+    MessageBody,
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnGatewayInit,
+    SubscribeMessage,
+    WebSocketGateway,
+    WebSocketServer,
+} from '@nestjs/websockets';
 
-@WebSocketGateway({ cors: { origin: ['http://localhost:4173', 'http://localhost:5173', 'https://fchat-client.vercel.app'], credentials: true } })
+export const GATEWAY_OPTIONS: GatewayMetadata = {
+    cors: {
+        origin: ['http://localhost:4173', 'http://localhost:5173'],
+        credentials: true,
+    },
+};
+
+@WebSocketGateway(GATEWAY_OPTIONS)
 export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
-    public readonly server: Server;
-    private readonly _sockets: Map<string, Array<SocketWithUser>> = new Map();
+    readonly server: Server;
+    readonly _sockets: Map<string, Array<SocketWithUser>> = new Map();
 
     constructor(
         private readonly authService: AuthService,
         private readonly conversationService: ConversationService,
-        private readonly userService: UserService,
         private readonly cookiesService: CookiesService
     ) {}
 
@@ -48,6 +61,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
         server.use(async (socket, next) => {
             try {
                 const cookies = socket.handshake.headers.cookie;
+
                 if (!cookies) throw new AppException({ message: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
                 
                 const { accessToken } = this.cookiesService.parseCookies(cookies);
@@ -55,9 +69,8 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
                 if (!accessToken) throw new AppException({ message: 'Unauthorized' }, HttpStatus.UNAUTHORIZED);
 
                 const { userId } = this.authService.verifyToken(accessToken, 'access');
-                const user = await this.authService.validate(userId);
-
-                socket.data.user = user;
+                
+                socket.data.user = await this.authService.validate(userId);
 
                 return next();
             } catch (error) {
@@ -111,136 +124,5 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
         this.removeSocket({ userId: client.data.user._id.toString(), socket: client });
 
         !this.sockets.has(client.data.user._id.toString()) && this.changeUserStatus({ presence: PRESENCE.OFFLINE, lastSeenAt: new Date() }, client);
-    }
-
-    @SubscribeMessage(CONVERSATION_EVENTS.JOIN)
-    async handleJoinConversation(@MessageBody() { recipientId }: { recipientId: string }, @ConnectedSocket() client: Socket) {
-        try {
-            const recipient = await this.userService.findById(recipientId);
-
-            if (!recipient) throw new Error('recipient not found');
-
-            client.join(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
-        } catch (error) {
-            // client.emit(`error`, { error: error.message });
-        }
-    }
-
-    @SubscribeMessage(CONVERSATION_EVENTS.LEAVE)
-    handleLeaveConversation(@MessageBody() { recipientId }: { recipientId: string }, @ConnectedSocket() client: Socket) {
-        client.leave(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.MESSAGE_READ)
-    onMessageRead({ messageId, initiatorId, recipientId, session_id }: { messageId: string; initiatorId: string; recipientId: string; session_id: string }) {
-        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, messageId);
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
-    onNewMessage({ initiator, session_id, feedItem }: ConversationSendMessageParams) {
-        const initiatorId = initiator._id.toString();
-        const recipientId = feedItem.item.recipient._id.toString();
-        const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
-
-        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
-        this.server.to(roomId).emit(CONVERSATION_EVENTS.STOP_TYPING);
-
-        [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
-            sockets?.forEach((socket) => {
-                socket.emit(FEED_EVENTS.CREATE, { 
-                    ...feedItem, 
-                    item: { 
-                        ...feedItem.item,
-                        recipient: socket.data.user._id.toString() === initiatorId ? feedItem.item.recipient : toRecipient(initiator.toObject())
-                    } 
-                });
-    
-                socket.data.user._id.toString() === recipientId && socket.emit(FEED_EVENTS.STOP_TYPING, {
-                    _id: feedItem._id,
-                    participant: { _id: initiatorId },
-                });
-            })
-        })
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.MESSAGE_EDIT)
-    onEditMessage({ isLastMessage, conversationId, initiatorId, session_id, message, recipientId }: ConversationEditMessageParams) {
-        (this.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, message);
-        
-        isLastMessage && [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
-            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage: message }));
-        })
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.MESSAGE_DELETE)
-    handleDeleteMessage({ initiatorId, recipientId, conversationId, findedMessageIds, lastMessage, lastMessageSentAt, isLastMessage }: ConversationDeleteMessageParams) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_DELETE, findedMessageIds);
-        
-        isLastMessage && [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
-            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage, lastActionAt: lastMessageSentAt }));
-        });
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.CREATED)
-    onConversationCreated({ initiatorId, recipientId, conversationId }: ConversationCreateParams) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.CREATED, conversationId);
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.DELETED)
-    onConversationDeleted({ initiatorId, recipientId, conversationId }: ConversationDeleteParams) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.DELETED);
-
-        [this.sockets.get(initiatorId), this.sockets.get(recipientId)].forEach((sockets) => {
-            sockets?.forEach((socket) => socket.emit(FEED_EVENTS.DELETE, conversationId)); 
-        });
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.USER_BLOCK)
-    onBlock({ initiatorId, recipientId }: { initiatorId: string; recipientId: string }) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.USER_BLOCK, recipientId);
-    }
-
-    @OnEvent(CONVERSATION_EVENTS.USER_UNBLOCK)
-    onUnblock({ initiatorId, recipientId }: { initiatorId: string; recipientId: string }) {
-        this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.USER_UNBLOCK, recipientId);
-    }
-
-    @SubscribeMessage(CONVERSATION_EVENTS.START_TYPING)
-    async onStartTyping(
-        @MessageBody() { conversationId, recipientId }: { conversationId: string; recipientId: string }, 
-        @ConnectedSocket() client: SocketWithUser
-    ) {
-        if (!await this.conversationService.exists({ _id: conversationId, participants: { $all: [client.data.user._id, recipientId] }})) return;
-
-        const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
-
-        client.to(roomId).emit(CONVERSATION_EVENTS.START_TYPING, client.data.user._id.toString());
-
-        this.sockets.get(recipientId)?.forEach((socket) => {
-            !socket.rooms.has(roomId) && socket.emit(FEED_EVENTS.START_TYPING, {
-                _id: conversationId,
-                participant: {
-                    _id: client.data.user._id.toString(),
-                    name: client.data.user.name,
-                },
-            });
-        });
-    }
-
-    @SubscribeMessage(CONVERSATION_EVENTS.STOP_TYPING)
-    onStopTyping(
-        @MessageBody() { recipientId, conversationId }: { conversationId: string; recipientId: string }, 
-        @ConnectedSocket() client: SocketWithUser
-    ) {
-        const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
-
-        client.to(roomId).emit(CONVERSATION_EVENTS.STOP_TYPING);
-
-        const recipientSockets = this.sockets.get(recipientId);
-
-        recipientSockets?.forEach((socket) => socket.emit(FEED_EVENTS.STOP_TYPING, {
-            _id: conversationId,
-            participant: { _id: client.data.user._id.toString() },
-        }));
     }
 }

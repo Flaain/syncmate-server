@@ -3,22 +3,20 @@ import { Injectable } from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { BaseService } from 'src/utils/services/base/base.service';
-import { FeedDocument, FeedSearchParams, GetFeedParams } from './types';
+import { FeedDocument, GetFeedParams } from './types';
 import { Feed } from './schemas/feed.schema';
-import { getFeedPipeline } from './utils/getFeedPipeline';
-import { getSearchPipeline } from './utils/getSearchPipeline';
+import { getFeedPipeline, getFeedSearchPipeline } from './utils/getFeedPipeline';
+import { SearchPipelineParams } from 'src/utils/types';
+import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
 
 @Injectable()
 export class FeedService extends BaseService<FeedDocument, Feed> {
-    constructor(
-        private readonly userService: UserService,
-        @InjectModel(Feed.name) private readonly feedModel: Model<FeedDocument>,
-    ) {
+    constructor(private readonly userService: UserService, @InjectModel(Feed.name) private readonly feedModel: Model<FeedDocument>) {
         super(feedModel);
     }
 
-    search = async (params: FeedSearchParams) => {
-        const result = (await this.userService.aggregate(getSearchPipeline(params)))[0];
+    search = async ({ limit, page, query, initiatorId }: Omit<SearchPipelineParams, 'pipeline'>) => {
+        const result = (await this.userService.aggregate(getSearchPipeline({ limit, page, pipeline: getFeedSearchPipeline({ initiatorId, query }) })))[0];
 
         return result;
     };

@@ -1,13 +1,13 @@
-import { Controller, Delete, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Query, Req } from '@nestjs/common';
 import { ConversationService } from './conversation.service';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AccessGuard } from '../auth/guards/auth.access.guard';
 import { CONVERSATION_EVENTS } from './types';
 import { paramPipe } from 'src/utils/constants';
+import { Auth } from '../auth/decorators/auth.decorator';
 
+@Auth()
 @Controller(Routes.CONVERSATION)
-@UseGuards(AccessGuard)
 export class ConversationController {
     constructor(
         private readonly conversationService: ConversationService,

@@ -1,21 +1,32 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { GroupService } from './group.service';
 import { CreateGroupDTO } from './dtos/create.group.dto';
-import { AccessGuard } from '../auth/guards/auth.access.guard';
+import { Auth } from '../auth/decorators/auth.decorator';
+import { paramPipe } from 'src/utils/constants';
 
+@Auth()
 @Controller(Routes.GROUP)
-@UseGuards(AccessGuard)
 export class GroupController {
     constructor(private readonly groupService: GroupService) {}
 
     @Post('create')
-    create(@Req() req: RequestWithUser, @Body() dto: CreateGroupDTO) {
-        return this.groupService.createGroup({ ...dto, initiator: req.doc.user });
+    create(@Req() { doc: { user } }: RequestWithUser, @Body() dto: CreateGroupDTO) {
+        return this.groupService.createGroup({ ...dto, initiator: user });
     }
 
     @Get(':id')
-    getGroup(@Req() req: RequestWithUser, @Param('id') groupId: string, @Query('invite') invite?: string) {
-        return this.groupService.getGroup({ groupId, initiator: req.doc.user, invite });
+    getGroup(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('invite') invite?: string) {
+        return this.groupService.getGroup({ groupId, initiator: user, invite });
+    }
+
+    @Get(':id/participants')
+    getParticipants(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('cursor') cursor?: string) {
+        return this.groupService.getParticipants({ groupId, cursor, initiator: user });
+    }
+
+    @Get(':id/previous-messages')
+    getPreviousMessages(@Req() { doc: { user } }: RequestWithUser, @Param('id', paramPipe) groupId: string, @Query('cursor') cursor: string) {
+        return this.groupService.getPreviousMessages({ groupId, cursor, initiator: user });
     }
 }

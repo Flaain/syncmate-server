@@ -11,9 +11,9 @@ export const allowCyrillicRegExp = /^[\p{L}0-9\s]*$/u;
 
 export const noSearchResults: Pick<AppException, 'message'> = {
     message: 'No results were found for your search',
-}
+};
 
-export const otpForSchema = z.string().trim().length(6, 'Invalid OTP code'); 
+export const otpForSchema = z.string().trim().length(6, 'Invalid OTP code');
 
 export const passwordForSchema = z
     .string()
@@ -27,6 +27,16 @@ export const nameForSchema = z
     .trim()
     .min(1, 'Name is required')
     .max(32, 'Name must be at most 32 characters long');
+    
+export const searchSchema = z.strictObject({
+    query: nameForSchema.trim().min(3, 'Search query must be at least 3 characters long'),
+    page: z.number({ coerce: true }).min(0).default(0),
+    limit: z
+        .number({ coerce: true })
+        .min(1, 'Limit must be between 1 and 10')
+        .max(10, 'Limit must be between 1 and 10')
+        .default(10),
+});
 
 export const loginForSchema = z
     .string()

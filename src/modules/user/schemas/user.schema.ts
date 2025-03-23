@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PRESENCE } from '../types';
+import { ROLES } from 'src/modules/auth/types';
 
 @Schema({ timestamps: true })
 export class User {
@@ -18,6 +19,9 @@ export class User {
 
     @Prop({ type: Date, required: true })
     birthDate: Date;
+
+    @Prop({ type: String, enum: ROLES, required: true, default: ROLES.USER })
+    role?: ROLES
 
     @Prop({ type: Boolean, required: true, default: false })
     isPrivate?: boolean;

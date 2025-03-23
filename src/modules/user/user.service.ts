@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { User } from './schemas/user.schema';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { UserDocument, UserSearchParams } from './types';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { Providers } from 'src/utils/types';
 import { UserStatusDTO } from './dtos/user.status.dto';
 import { UserNameDto } from './dtos/user.name.dto';
@@ -16,10 +16,12 @@ import { checkErrors } from './constants';
 import { defaultSuccessResponse } from 'src/utils/constants';
 import { BlockList } from './schemas/user.blocklist.schema';
 import { recipientProjection } from '../conversation/constants';
+import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
     constructor(
+        @InjectConnection() private readonly connection: Connection,
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
         @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
         @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
@@ -57,16 +59,22 @@ export class UserService extends BaseService<UserDocument, User> {
     }
 
     search = async ({ initiatorId, query, page, limit }: UserSearchParams) => {
-        const users = await this.find({
-            filter: {
-                _id: { $ne: initiatorId },
-                $or: [{ name: { $regex: query, $options: 'i' } }, { login: { $regex: query, $options: 'i' } }],
-                isPrivate: false,
-                isDeleted: false,
-            },
-            projection: { _id: 1, name: 1, login: 1, isOfficial: 1 },
-            options: { limit, skip: page * limit, sort: { createdAt: -1 } },
-        }).lean();
+        const users = (await this.aggregate(getSearchPipeline({
+            limit,
+            page,
+            pipeline: [
+                {
+                    $match: {
+                        _id: { $ne: initiatorId },
+                        $or: [{ name: { $regex: query, $options: 'i' } }, { login: { $regex: query, $options: 'i' } }],
+                        isPrivate: false,
+                        isDeleted: false,
+                    },
+                },
+                { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar' } },
+                { $project: { _id: 1, name: 1, login: 1, isOfficial: 1 } }
+            ]
+        })))[0];
 
         return users;
     };
@@ -101,7 +109,7 @@ export class UserService extends BaseService<UserDocument, User> {
     };
 
     changeAvatar = async ({ initiator, file }: { initiator: UserDocument; file: Express.Multer.File }) => {
-        const key = `users/${initiator._id.toString()}/avatars/${process.env.NODE_ENV === 'dev'  ? Date.now() : crypto.randomUUID()}`;
+        const key = `users/${initiator._id.toString()}/avatars/${process.env.NODE_ENV === 'dev' ? Date.now() : crypto.randomUUID()}`;
         const url = `${process.env.BUCKET_PUBLIC_ENDPOINT}/${key}`
 
         await this.s3.send(new PutObjectCommand({
@@ -112,23 +120,61 @@ export class UserService extends BaseService<UserDocument, User> {
             ACL: 'public-read'
         }));
 
-        const newFile = await this.fileService.create({ key, url, mimetype: file.mimetype, size: file.size });
+        const session = await this.connection.startSession();
 
-        await Promise.all([
-            initiator.avatar && this.fileService.deleteMany({ _id: initiator.avatar }), // anyways we store old avatar in storage but delete it from db just in case if we want keep old avatar we should keep it in db
-            initiator.updateOne({ avatar: newFile._id }),
-        ]);
+        session.startTransaction();
 
-        return { _id: newFile._id.toString(), url }
+        try {
+            const newFile = await this.fileService.create([{ key, url, mimetype: file.mimetype, size: file.size }], { session });
+
+            initiator.avatar && await this.fileService.deleteMany({ _id: initiator.avatar }); // anyways we store old avatar in storage but delete it from db just in case if we want keep old avatar we should keep it in db
+            
+            await initiator.updateOne({ avatar: newFile._id });
+            
+            await session.commitTransaction();
+
+            return { _id: newFile._id.toString(), url }
+        } catch (error) {
+            await session.abortTransaction();
+
+            throw error;
+        } finally {
+            await session.endSession();
+        }
     }
 
-    getRecipient = async (recipientId: string | Types.ObjectId) => {
-        const recipient = (await this.aggregate([
-            { $match: { _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId } },
-            { $lookup: { from: 'files', localField: 'avatar', foreignField: '_id', as: 'avatar', pipeline: [{ $project: { url: 1 } }] } },
-            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-            { $project: recipientProjection },
-        ]))[0];
+    toRecipient = (user: UserDocument) => ({
+        _id: user._id.toString(),
+        avatar: user.avatar,
+        name: user.name,
+        login: user.login,
+        presence: user.presence,
+        isOfficial: user.isOfficial,
+    })
+
+    getRecipient = async (recipientId: string | Types.ObjectId, session?: ClientSession) => {
+        const recipient = (
+            await this.aggregate(
+                [
+                    {
+                        $match: {
+                            _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId,
+                        },
+                    },
+                    {
+                        $lookup: {
+                            from: 'files',
+                            localField: 'avatar',
+                            foreignField: '_id',
+                            as: 'avatar',
+                            pipeline: [{ $project: { url: 1 } }],
+                        },
+                    },
+                    { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
+                    { $project: recipientProjection },
+                ],
+            )
+        )[0];
 
         if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
 
