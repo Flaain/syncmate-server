@@ -7,7 +7,7 @@ export class Feed {
     @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId }], ref: 'User', required: true })
     users: Array<mongoose.Types.ObjectId>;
 
-    @Prop({ type: mongoose.Schema.Types.ObjectId, refPath: 'type', required: true })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, refPath: 'type', required: true, index: { unique: true } })
     item: mongoose.Types.ObjectId;
 
     @Prop({ type: Date, required: true })

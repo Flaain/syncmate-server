@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Message } from './schemas/message.schema';
-import { Connection, Model } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
 import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
 import { ConversationService } from '../conversation/conversation.service';
@@ -33,15 +33,18 @@ export class MessageService extends BaseService<MessageDocument, Message> {
     }
 
     private isMessagingRestricted = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
-        if (
-            await this.blocklistModel.exists({
+        const isMessagingRestricted = await this.blocklistModel.findOne(
+            {
                 $or: [
-                    { user: recipientId, blockList: { $in: [initiator._id] } },
-                    { user: initiator._id, blockList: { $in: [recipientId] } },
+                    { user: new Types.ObjectId(recipientId), blockList: { $in: initiator._id } },
+                    { user: initiator._id, blockList: { $in: recipientId } },
                 ],
-            })
-        )
-            throw new AppException({ message: 'Messaging restricted' }, HttpStatus.BAD_REQUEST);
+            },
+            { _id: 1 },
+            { limit: 1 },
+        );
+
+        if (isMessagingRestricted) throw new AppException({ message: 'Messaging is restricted' }, HttpStatus.FORBIDDEN);
     };
 
     send = async (dto: SendMessageParams) => {
@@ -100,11 +103,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                       )
                   )[0]
                 : await this.feedService.findOneAndUpdate({
-                      filter: {
-                          item: ctx.conversation._id,
-                          users: { $in: [initiator._id, recipient._id] },
-                          type: FEED_TYPE.CONVERSATION,
-                      },
+                      filter: { item: ctx.conversation._id },
                       update: { lastActionAt: newMessage.createdAt },
                       options: { returnDocument: 'after', session },
                   });
@@ -118,21 +117,11 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 { session },
             );
 
-            const unread_recipient = await this.countDocuments(
-                {
-                    source: ctx.conversation._id,
-                    sender: initiator._id,
-                    read_by: { $nin: recipient._id },
-                },
-                { session },
-            );
-
-            const unread_initiator = await this.countDocuments(
-                {
-                    source: ctx.conversation._id,
-                    sender: recipient._id,
-                    read_by: { $nin: initiator._id },
-                },
+            const unread = await this.aggregate(
+                [
+                    { $match: { source: ctx.conversation._id, read_by: { $size: 0 } } },
+                    { $group: { _id: '$sender', count: { $sum: 1 } } },
+                ],
                 { session },
             );
 
@@ -140,8 +129,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             return {
                 isNewConversation: ctx.isNewConversation,
-                unread_recipient,
-                unread_initiator,
+                unread_recipient: unread.find(({ _id }) => _id.toString() === initiator._id.toString())?.count,
+                unread_initiator: unread.find(({ _id }) => _id.toString() === recipient._id.toString())?.count,
                 feedItem: {
                     _id,
                     type,

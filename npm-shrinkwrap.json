@@ -26,7 +26,6 @@
                 "nestjs-zod": "^3.0.0",
                 "nodemailer": "^6.9.14",
                 "reflect-metadata": "^0.2.0",
-                "rxjs": "^7.8.1",
                 "zod": "^3.22.4"
             },
             "devDependencies": {
@@ -12689,6 +12688,7 @@
             "version": "7.8.1",
             "resolved": "https://registry.npmjs.org/rxjs/-/rxjs-7.8.1.tgz",
             "integrity": "sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==",
+            "dev": true,
             "license": "Apache-2.0",
             "dependencies": {
                 "tslib": "^2.1.0"

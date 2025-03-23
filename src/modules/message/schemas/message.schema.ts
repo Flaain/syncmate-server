@@ -4,13 +4,13 @@ import { MessageSourceRefPath } from '../types';
 
 @Schema({ timestamps: true })
 export class Message {
-    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, index: true, required: true, ref: 'User' })
     sender: mongoose.Types.ObjectId;
 
     @Prop({ type: String, required: true })
     text: string;
 
-    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'sourceRefPath' })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, index: true, refPath: 'sourceRefPath' })
     source: mongoose.Types.ObjectId;
 
     @Prop({ type: String, enum: MessageSourceRefPath, required: true })
