@@ -1,22 +1,20 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { ConversationService } from './conversation.service';
-import { ConversationController } from './conversation.controller';
-import { Conversation, ConversationSchema } from './schemas/conversation.schema';
 import { MongooseModule } from '@nestjs/mongoose';
-import { UserModule } from '../user/user.module';
-import { ParticipantModule } from '../participant/participant.module';
-import { User, UserSchema } from '../user/schemas/user.schema';
-import { FeedModule } from '../feed/feed.module';
 import { AuthModule } from '../auth/auth.module';
+import { FeedModule } from '../feed/feed.module';
+import { GatewayModule } from '../gateway/gateway.module';
 import { MessageModule } from '../message/message.module';
 import { BlockList, BlockListSchema } from '../user/schemas/user.blocklist.schema';
-import { GatewayModule } from '../gateway/gateway.module';
+import { User, UserSchema } from '../user/schemas/user.schema';
+import { UserModule } from '../user/user.module';
+import { ConversationController } from './conversation.controller';
 import { ConversationGateway } from './conversation.gateway';
+import { ConversationService } from './conversation.service';
+import { Conversation, ConversationSchema } from './schemas/conversation.schema';
 
 @Module({
     imports: [
         UserModule,
-        ParticipantModule,
         FeedModule,
         MongooseModule.forFeature([
             { name: Conversation.name, schema: ConversationSchema },
