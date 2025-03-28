@@ -1,10 +1,8 @@
 FROM node:22.14 as base
 
-ARG APP_DIR=app
+RUN mkdir -p app
 
-RUN mkdir -p ${APP_DIR}
-
-WORKDIR ${APP_DIR}
+WORKDIR /app
 
 COPY package.json npm-shrinkwrap.json ./
 
@@ -20,7 +18,7 @@ FROM build as production
 
 ENV NODE_ENV=production
 
-WORKDIR ${APP_DIR}
+WORKDIR /app
 
 COPY --from=build /app/package.json /app/npm-shrinkwrap.json
 
