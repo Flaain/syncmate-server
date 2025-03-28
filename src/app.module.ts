@@ -12,14 +12,11 @@ import { ConversationModule } from './modules/conversation/conversation.module';
 import { FeedModule } from './modules/feed/feed.module';
 import { FileModule } from './modules/file/file.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
-import { GroupModule } from './modules/group/group.module';
 import { MessageModule } from './modules/message/message.module';
 import { OtpModule } from './modules/otp/otp.module';
-import { ParticipantModule } from './modules/participant/participant.module';
 import { SessionModule } from './modules/session/session.module';
 import { UserModule } from './modules/user/user.module';
 import { BucketModule } from './utils/services/bucket/bucket.module';
-
 
 @Module({
     imports: [
@@ -42,8 +39,6 @@ import { BucketModule } from './utils/services/bucket/bucket.module';
         ConversationModule,
         FileModule,
         MessageModule,
-        ParticipantModule,
-        GroupModule,
         OtpModule,
         GatewayModule,
     ],

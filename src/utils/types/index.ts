@@ -1,4 +1,4 @@
-import { Document, FilterQuery, ProjectionType, UpdateQuery as MongooseUpdateQuery, QueryOptions, UpdateWithAggregationPipeline, Types, PipelineStage } from 'mongoose';
+import { Document, FilterQuery, UpdateQuery as MongooseUpdateQuery, PipelineStage, ProjectionType, QueryOptions, Types, UpdateWithAggregationPipeline } from 'mongoose';
 import { SessionDocument } from 'src/modules/session/types';
 import { UserDocument } from 'src/modules/user/types';
 
@@ -18,10 +18,8 @@ export enum THROTTLERS {
 export enum Routes {
     AUTH = 'auth',
     USER = 'user',
-    GROUP = 'group',
     FEED = 'feed',
     SESSION = 'session',
-    CLOUD = 'cloud',
     CONVERSATION = 'conversation',
     PARTICIPANT = 'participant',
     MESSAGE = 'message',

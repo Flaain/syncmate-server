@@ -1,20 +1,18 @@
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Message } from './schemas/message.schema';
-import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
-import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
-import { ConversationService } from '../conversation/conversation.service';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BaseService } from 'src/utils/services/base/base.service';
-import { UserService } from '../user/user.service';
-import { UserDocument } from '../user/types';
-import { MessageReplyDTO } from './dtos/message.reply.dto';
+import { ConversationService } from '../conversation/conversation.service';
 import { FeedService } from '../feed/feed.service';
 import { FEED_TYPE } from '../feed/types';
 import { BlockList } from '../user/schemas/user.blocklist.schema';
-import { GroupService } from '../group/group.service';
-import { ParticipantService } from '../participant/participant.service';
+import { UserDocument } from '../user/types';
+import { UserService } from '../user/user.service';
+import { MessageReplyDTO } from './dtos/message.reply.dto';
+import { Message } from './schemas/message.schema';
+import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
 
 @Injectable()
 export class MessageService extends BaseService<MessageDocument, Message> {
@@ -25,8 +23,6 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         @Inject(forwardRef(() => ConversationService)) private readonly conversationService: ConversationService,
         private readonly userService: UserService,
         private readonly feedService: FeedService,
-        private readonly groupService: GroupService,
-        private readonly participantService: ParticipantService,
     ) {
         super(messageModel);
     }
@@ -406,108 +402,6 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 await session.abortTransaction();
 
                 return this.delete(dto);
-            } else {
-                !session.transaction.isCommitted && (await session.abortTransaction());
-
-                throw error;
-            }
-        } finally {
-            session.endSession();
-        }
-    };
-
-    sendGroupMessage = async (dto: Omit<SendMessageParams, 'recipientId' | 'session_id'> & { groupId: string }) => {
-        const { groupId, message, initiator } = dto;
-
-        const session = await this.connection.startSession();
-
-        try {
-            session.startTransaction();
-
-            const participant = await this.participantService.findOne({
-                filter: { user: initiator._id, group: groupId },
-                projection: { group: 0, user: 0 },
-                options: { session },
-            });
-
-            if (!participant)
-                throw new AppException(
-                    { message: 'Cannot send message to group you are not a participant' },
-                    HttpStatus.FORBIDDEN,
-                );
-
-            const group: any = await this.groupService.findById(groupId, {
-                options: {
-                    populate: {
-                        path: 'avatar',
-                        model: 'File',
-                        select: 'url',
-                    },
-                    session,
-                },
-            });
-
-            if (!group) throw new AppException({ message: 'Group not found' }, HttpStatus.NOT_FOUND); // not necessary but for safety
-
-            const newMessage = (
-                await this.create(
-                    [
-                        {
-                            sender: initiator._id,
-                            text: message.trim(),
-                            source: group._id,
-                            sourceRefPath: MessageSourceRefPath.GROUP,
-                        },
-                    ],
-                    { session },
-                )
-            )[0];
-
-            const { _id, type, lastActionAt } = await this.feedService.findOneAndUpdate({
-                filter: { item: group._id, type: FEED_TYPE.GROUP },
-                update: { lastActionAt: newMessage.createdAt },
-                options: { returnDocument: 'after', session },
-            });
-
-            await group.updateOne(
-                {
-                    lastMessage: newMessage._id,
-                    lastMessageSentAt: newMessage.createdAt,
-                    $push: { messages: newMessage._id },
-                },
-                { session },
-            );
-
-            await BaseService.commitWithRetry(session);
-
-            return {
-                _id,
-                type,
-                lastActionAt,
-                item: {
-                    _id: group._id,
-                    name: group.name,
-                    avatar: group.avatar,
-                    login: group.login,
-                    isOfficial: group.isOfficial,
-                    lastMessage: {
-                        ...newMessage.toObject(),
-                        sender: {
-                            _id: initiator._id,
-                            name: initiator.name,
-                            email: initiator.email,
-                            isOfficial: initiator.isOfficial,
-                            avatar: initiator.avatar,
-                            participant: participant.toObject(),
-                        },
-                    },
-                },
-            };
-        } catch (error) {
-            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
-                await session.abortTransaction();
-
-                return this.sendGroupMessage(dto);
             } else {
                 !session.transaction.isCommitted && (await session.abortTransaction());
 

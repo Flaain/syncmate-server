@@ -1,13 +1,13 @@
 import { Body, Controller, Delete, Param, Patch, Post, Query, Req } from '@nestjs/common';
-import { MessageService } from './message.service';
-import { MessageSendDTO } from './dtos/message.send.dto';
-import { RequestWithUser, Routes } from 'src/utils/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Throttle } from '@nestjs/throttler';
-import { CONVERSATION_EVENTS, GROUP_EVENTS } from '../conversation/types';
 import { defaultSuccessResponse, paramPipe } from 'src/utils/constants';
+import { RequestWithUser, Routes } from 'src/utils/types';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { CONVERSATION_EVENTS } from '../conversation/types';
+import { MessageReplyDTO } from './dtos/message.reply.dto';
+import { MessageSendDTO } from './dtos/message.send.dto';
+import { MessageService } from './message.service';
 
 @Auth()
 @Controller(Routes.MESSAGE)
@@ -123,18 +123,5 @@ export class MessageController {
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_DELETE, { ...data, recipientId, initiatorId });
 
         return data.findedMessageIds;
-    }
-
-    @Post('group/send/:groupId')
-    async sendGroupMessage(
-        @Req() { doc: { user } }: RequestWithUser,
-        @Body() dto: MessageSendDTO,
-        @Param('groupId', paramPipe) groupId: string,
-    ) {
-        const feedItem = await this.messageService.sendGroupMessage({ ...dto, groupId, initiator: user });
-
-        this.eventEmitter.emit(GROUP_EVENTS.MESSAGE_SEND, { feedItem, initiator: user, session_id: dto.session_id });
-
-        return feedItem.item.lastMessage;
     }
 }
