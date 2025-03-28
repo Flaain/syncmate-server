@@ -123,14 +123,11 @@ export class ConversationGateway {
         for (let i = 0, sockets = [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)]; i < sockets.length; i += 1) {
             for (let j = 0, s = sockets[i]; j < s?.length; j += 1) {
                 const socket = s[j];
+                const isInitiator = socket.data.user._id.toString() === initiatorId;
 
                 isLastMessage && socket.emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage, lastActionAt: lastMessageSentAt });
 
-                socket.emit(FEED_EVENTS.UNREAD_COUNTER, {
-                    action: 'set',
-                    itemId: conversationId,
-                    ...(socket.data.user._id.toString() === recipientId && { count: unreadMessages }),
-                });
+                !isInitiator && socket.emit(FEED_EVENTS.UNREAD_COUNTER, { action: 'set', ctx: 'conversation', itemId: conversationId, count: unreadMessages });
             }
         }
     }

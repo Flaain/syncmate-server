@@ -77,7 +77,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 ctx.isNewConversation = true;
                 ctx.conversation = (await this.conversationService.create([{ participants: [recipient._id, initiator._id] }], { session }))[0];
             }
-
+            
             const newMessage = (
                 await this.create(
                     [
@@ -224,7 +224,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             )[0];
 
             const { _id, type, lastActionAt } = await this.feedService.findOneAndUpdate({
-                filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION },
+                filter: { item: conversation._id },
                 update: { lastActionAt: newMessage.createdAt },
                 options: { returnDocument: 'after', session },
             });
@@ -377,7 +377,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             const params = { options: { session, populate: { path: 'sender', model: 'User', select: 'name' } } };
 
             const lastMessage = isLastMessage ? conversation.messages.length ? await this.findById(conversation.messages[0]._id, params) : null : conversation.lastMessage;
-            const lastMessageSentAt = 'createdAt' in lastMessage ? lastMessage.createdAt : conversation.createdAt;
+            const lastMessageSentAt = (lastMessage as Message)?.createdAt ?? conversation.createdAt;
 
             await this.deleteMany({ _id: { $in: findedMessageIds }, sender: initiatorId }, { session });
 
@@ -385,10 +385,10 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             isLastMessage && (await conversation.updateOne({ lastMessage, lastMessageSentAt }, { session }));
 
-            await this.feedService.updateOne({
-                filter: { item: conversation._id, type: FEED_TYPE.CONVERSATION },
+            await this.feedService.findOneAndUpdate({
+                filter: { item: conversation._id },
                 update: { lastActionAt: lastMessageSentAt },
-                options: { session },
+                options: { returnDocument: 'after', session },
             });
 
             await BaseService.commitWithRetry(session);

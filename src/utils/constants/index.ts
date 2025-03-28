@@ -1,6 +1,6 @@
+import { PipeTransform } from '@nestjs/common';
 import { z } from 'zod';
 import { AppException } from '../exceptions/app.exception';
-import { PipeTransform } from '@nestjs/common';
 import { validateParamId } from '../helpers/validateParamId';
 
 export const paramPipe: PipeTransform = { transform: validateParamId };

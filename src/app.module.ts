@@ -1,25 +1,29 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+
+const configModule = ConfigModule.forRoot({ isGlobal: true, expandVariables: true, cache: true });
+
+import { APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AuthModule } from './modules/auth/auth.module';
-import { UserModule } from './modules/user/user.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
-import { MessageModule } from './modules/message/message.module';
-import { GatewayModule } from './modules/gateway/gateway.module';
-import { ParticipantModule } from './modules/participant/participant.module';
-import { GroupModule } from './modules/group/group.module';
-import { SessionModule } from './modules/session/session.module';
-import { OtpModule } from './modules/otp/otp.module';
 import { FeedModule } from './modules/feed/feed.module';
-import { BucketModule } from './utils/services/bucket/bucket.module';
-import { APP_GUARD } from '@nestjs/core';
 import { FileModule } from './modules/file/file.module';
+import { GatewayModule } from './modules/gateway/gateway.module';
+import { GroupModule } from './modules/group/group.module';
+import { MessageModule } from './modules/message/message.module';
+import { OtpModule } from './modules/otp/otp.module';
+import { ParticipantModule } from './modules/participant/participant.module';
+import { SessionModule } from './modules/session/session.module';
+import { UserModule } from './modules/user/user.module';
+import { BucketModule } from './utils/services/bucket/bucket.module';
+
 
 @Module({
     imports: [
-        ConfigModule.forRoot({ isGlobal: true, expandVariables: true }),
+        configModule,
         AuthModule,
         SessionModule,
         UserModule,

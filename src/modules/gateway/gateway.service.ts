@@ -1,14 +1,4 @@
-import { Server } from 'socket.io';
-import { ChangeUserStatusParams, SocketWithUser} from './types';
-import { AppException } from 'src/utils/exceptions/app.exception';
 import { HttpStatus } from '@nestjs/common';
-import { CookiesService } from 'src/utils/services/cookies/cookies.service';
-import { ConversationService } from '../conversation/conversation.service';
-import { PRESENCE, USER_EVENTS } from '../user/types';
-import { AuthService } from '../auth/auth.service';
-import { FEED_EVENTS } from '../feed/types';
-import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
-import { CONVERSATION_EVENTS } from '../conversation/types';
 import {
     ConnectedSocket,
     GatewayMetadata,
@@ -20,10 +10,20 @@ import {
     WebSocketGateway,
     WebSocketServer,
 } from '@nestjs/websockets';
+import { Server } from 'socket.io';
+import { AppException } from 'src/utils/exceptions/app.exception';
+import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
+import { CookiesService } from 'src/utils/services/cookies/cookies.service';
+import { AuthService } from '../auth/auth.service';
+import { ConversationService } from '../conversation/conversation.service';
+import { CONVERSATION_EVENTS } from '../conversation/types';
+import { FEED_EVENTS } from '../feed/types';
+import { PRESENCE, USER_EVENTS } from '../user/types';
+import { ChangeUserStatusParams, SocketWithUser } from './types';
 
 export const GATEWAY_OPTIONS: GatewayMetadata = {
     cors: {
-        origin: ['http://localhost:4173', 'http://localhost:5173'],
+        origin: process.env.CLIENT_URL,
         credentials: true,
     },
 };

@@ -95,7 +95,7 @@ export class MessageController {
     @Patch('read/:messageId')
     async read(
         @Req() { doc: { user } }: RequestWithUser,
-        @Body() { session_id, recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>,
+        @Body() { recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>,
         @Param('messageId', paramPipe) messageId: string,
     ) {
         const { conversationId, readedAt } = await this.messageService.read({ messageId, initiator: user, recipientId });

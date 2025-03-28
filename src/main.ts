@@ -1,11 +1,11 @@
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { ZodValidationPipe } from 'nestjs-zod';
-import { AllExceptionFilter } from './utils/filters/all.expection.filter';
-import { CookiesService } from './utils/services/cookies/cookies.service';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { ZodValidationPipe } from 'nestjs-zod';
+import { AppModule } from './app.module';
+import { AllExceptionFilter } from './utils/filters/all.expection.filter';
 import { cookieParser } from './utils/middlewares/cookieParser';
+import { CookiesService } from './utils/services/cookies/cookies.service';
 
 (async () => {
     try {
@@ -17,11 +17,11 @@ import { cookieParser } from './utils/middlewares/cookieParser';
             console.error('🔥 Unhandled Rejection:', reason);
         });
 
-        const PORT = 3000;
+        const PORT = process.env.PORT ?? 3000;
 
         const app = await NestFactory.create<NestExpressApplication>(AppModule, {
             cors: {
-                origin: ['http://localhost:4173', 'http://localhost:5173', 'https://fchat-client.vercel.app'],
+                origin: process.env.CLIENT_URL,
                 credentials: true,
             },
         });
