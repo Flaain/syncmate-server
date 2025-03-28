@@ -20,7 +20,7 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-COPY --from=build /app/package.json /app/npm-shrinkwrap.json
+COPY --from=build /app/package.json /app/npm-shrinkwrap.json ./
 
 RUN npm i --production
 
