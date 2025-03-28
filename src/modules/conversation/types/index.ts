@@ -1,9 +1,9 @@
 import { HydratedDocument, Types } from 'mongoose';
-import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
-import { Message } from 'src/modules/message/schemas/message.schema';
-import { User } from 'src/modules/user/schemas/user.schema';
-import { UserDocument } from 'src/modules/user/types';
 import { Conversation } from '../schemas/conversation.schema';
+import { User } from 'src/modules/user/schemas/user.schema';
+import { Message } from 'src/modules/message/schemas/message.schema';
+import { UserDocument } from 'src/modules/user/types';
+import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
 
 export enum CONVERSATION_EVENTS {
     JOIN = 'conversation.join',
@@ -19,6 +19,15 @@ export enum CONVERSATION_EVENTS {
     USER_UNBLOCK = 'conversation.user.unblock',
     START_TYPING = 'conversation.start.typing',
     STOP_TYPING = 'conversation.stop.typing',
+}
+
+export enum GROUP_EVENTS {
+    JOIN = 'group.join',
+    LEAVE = 'group.leave',
+    MESSAGE_READ = 'group.message.read',
+    MESSAGE_SEND = 'group.message.send',
+    MESSAGE_EDIT = 'group.message.edit',
+    MESSAGE_DELETE = 'group.message.delete',
 }
 
 export interface ConversationDeleteMessageParams {

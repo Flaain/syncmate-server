@@ -1,18 +1,22 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { MessageService } from './message.service';
+import { MessageController } from './message.controller';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AuthModule } from '../auth/auth.module';
+import { Message, MessageSchema } from './schemas/message.schema';
 import { ConversationModule } from '../conversation/conversation.module';
+import { UserModule } from '../user/user.module';
 import { FeedModule } from '../feed/feed.module';
 import { BlockList, BlockListSchema } from '../user/schemas/user.blocklist.schema';
-import { UserModule } from '../user/user.module';
-import { MessageController } from './message.controller';
-import { MessageService } from './message.service';
-import { Message, MessageSchema } from './schemas/message.schema';
+import { AuthModule } from '../auth/auth.module';
+import { GroupModule } from '../group/group.module';
+import { ParticipantModule } from '../participant/participant.module';
 
 @Module({
     imports: [
         FeedModule,
         UserModule,
+        GroupModule,
+        ParticipantModule,
         MongooseModule.forFeature([
             { name: Message.name, schema: MessageSchema },
             { name: BlockList.name, schema: BlockListSchema },

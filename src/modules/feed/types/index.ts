@@ -1,10 +1,13 @@
-import { HydratedDocument, SchemaTimestampsConfig, Types } from 'mongoose';
+import { HydratedDocument, SchemaTimestampsConfig } from 'mongoose';
+import { Types } from 'mongoose';
+import { Feed } from '../schemas/feed.schema';
+import { IPagination } from 'src/utils/types';
 import { ConversationDocument } from 'src/modules/conversation/types';
 import { UserDocument } from 'src/modules/user/types';
-import { Feed } from '../schemas/feed.schema';
 
 export enum FEED_TYPE {
     CONVERSATION = 'Conversation',
+    GROUP = 'Group',
     CLOUD = 'Cloud',
     ADS = 'ADS'
 }
