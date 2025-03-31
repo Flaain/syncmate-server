@@ -4,7 +4,9 @@ namespace NodeJS {
         // UTILS
         PORT: string;
         NODE_ENV: NODE_ENV;
-        CLIENT_URL: string;
+        
+        A_CLIENT_URL: string;
+        B_CLIENT_URL: string;
         
         // DATABASE
         DATABASE_USERNAME: string;
