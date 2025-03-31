@@ -23,7 +23,7 @@ import { ChangeUserStatusParams, SocketWithUser } from './types';
 
 export const GATEWAY_OPTIONS: GatewayMetadata = {
     cors: {
-        origin: process.env.CLIENT_URL,
+        origin: Array.isArray(process.env.CLIENT_URL) ? process.env.CLIENT_URL.split(' ') : process.env.CLIENT_URL,
         credentials: true,
     },
 };
