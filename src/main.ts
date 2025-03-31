@@ -21,11 +21,10 @@ import { CookiesService } from './utils/services/cookies/cookies.service';
 
         const app = await NestFactory.create<NestExpressApplication>(AppModule, {
             cors: {
-                origin: Array.isArray(process.env.CLIENT_URL) ? process.env.CLIENT_URL.split(' ') : process.env.CLIENT_URL,
+                origin: process.env.CLIENT_URL.split(' '),
                 credentials: true,
             },
         });
-
         app.use(cookieParser);
 
         app.useGlobalPipes(new ZodValidationPipe());
