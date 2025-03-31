@@ -8,8 +8,9 @@ import { MailService } from './mail.service';
             useFactory: () => ({
                 transport: {
                     host: process.env.MAILER_HOST,
-                    secure: true,
+                    secure: false,
                     port: 587,
+                    tls: { ciphers: 'SSLv3' },
                     auth: {
                         user: process.env.MAILER_USER,
                         pass: process.env.MAILER_PASS
