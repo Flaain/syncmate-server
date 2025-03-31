@@ -21,7 +21,7 @@ import { CookiesService } from './utils/services/cookies/cookies.service';
 
         const app = await NestFactory.create<NestExpressApplication>(AppModule, {
             cors: {
-                origin: [process.env.A_CLIENT_URL, process.env.B_CLIENT_URL],
+                origin: process.env.CLIENT_URL.split(' '),
                 credentials: true,
             },
         });
