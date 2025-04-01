@@ -9,7 +9,7 @@ export class MailService {
     constructor(private readonly mailerService: MailerService) {}
 
     sendOtpEmail = ({ otp, type, email }: { otp: number; type: OtpType; email: string }) => this.mailerService.sendMail({
-        from: 'Syncmate',
+        from: { name: 'Syncmate', address: 'noreply@syncmate.ru' },
         to: email,
         subject: 'Verification code',
         html: getOtpTemplate(otp, titles[type])
