@@ -1,11 +1,11 @@
 import { OnEvent } from '@nestjs/event-emitter';
-import { Socket, Server } from 'socket.io';
-import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer  } from '@nestjs/websockets';
+import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
+import { FEED_EVENTS } from '../feed/types';
+import { GATEWAY_OPTIONS, GatewayService } from '../gateway/gateway.service';
 import { SocketWithUser } from '../gateway/types';
 import { UserService } from '../user/user.service';
-import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
-import { GATEWAY_OPTIONS, GatewayService } from '../gateway/gateway.service';
-import { FEED_EVENTS } from '../feed/types';
 import { ConversationService } from './conversation.service';
 import {
     CONVERSATION_EVENTS,
@@ -80,7 +80,7 @@ export class ConversationGateway {
                         unreadMessages: isInitiator ? unread_initiator : unread_recipient,
                         recipient: isInitiator ? feedItem.item.recipient : this.userService.toRecipient(initiator),
                     },
-                });
+                }, !socket.rooms.has(roomId) && !isInitiator);
             }
         }
     }
