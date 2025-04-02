@@ -1,5 +1,5 @@
 import { PipelineStage } from 'mongoose';
-import { recipientProjection } from 'src/modules/conversation/constants';
+import { recipientProjection } from 'src/utils/constants';
 import { SearchPipelineParams } from 'src/utils/types';
 import { GetFeedPipelineParams } from '../types';
 

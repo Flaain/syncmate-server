@@ -3,6 +3,19 @@ import { z } from 'zod';
 import { AppException } from '../exceptions/app.exception';
 import { validateParamId } from '../helpers/validateParamId';
 
+export const MESSAGES_BATCH = 25;
+
+export const recipientProjection = {
+    _id: 1,
+    name: 1,
+    login: 1,
+    avatar: 1,
+    isOfficial: 1,
+    isPrivate: 1,
+    presence: 1,
+    lastSeenAt: 1,
+};
+
 export const paramPipe: PipeTransform = { transform: validateParamId };
 export const defaultSuccessResponse = { message: 'OK' };
 

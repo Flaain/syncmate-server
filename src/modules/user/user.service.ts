@@ -1,22 +1,21 @@
-import { z } from 'zod';
-import { User } from './schemas/user.schema';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { userCheckSchema } from './schemas/user.check.schema';
-import { AppException } from 'src/utils/exceptions/app.exception';
-import { UserDocument, UserSearchParams } from './types';
-import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { Providers } from 'src/utils/types';
-import { UserStatusDTO } from './dtos/user.status.dto';
-import { UserNameDto } from './dtos/user.name.dto';
-import { BaseService } from 'src/utils/services/base/base.service';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
+import { defaultSuccessResponse, recipientProjection } from 'src/utils/constants';
+import { AppException } from 'src/utils/exceptions/app.exception';
+import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
+import { BaseService } from 'src/utils/services/base/base.service';
+import { Providers } from 'src/utils/types';
+import { z } from 'zod';
 import { FileService } from '../file/file.service';
 import { checkErrors } from './constants';
-import { defaultSuccessResponse } from 'src/utils/constants';
+import { UserNameDto } from './dtos/user.name.dto';
+import { UserStatusDTO } from './dtos/user.status.dto';
 import { BlockList } from './schemas/user.blocklist.schema';
-import { recipientProjection } from '../conversation/constants';
-import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
+import { userCheckSchema } from './schemas/user.check.schema';
+import { User } from './schemas/user.schema';
+import { UserDocument, UserSearchParams } from './types';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {

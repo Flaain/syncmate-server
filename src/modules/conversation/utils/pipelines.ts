@@ -1,5 +1,5 @@
 import { PipelineStage, Types } from 'mongoose';
-import { MESSAGES_BATCH } from '../constants';
+import { MESSAGES_BATCH } from 'src/utils/constants';
 
 export const getConversationPipeline = (
     initiatorId: Types.ObjectId,
