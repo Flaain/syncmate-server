@@ -73,7 +73,7 @@ export const emailForSchema = z
     .toLowerCase();
 
 export const reservedLogins = [
-    'fchat',
+    'syncmate',
     'admin',
     'administrator',
     'moderator',

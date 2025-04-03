@@ -1,18 +1,18 @@
+import { S3Client } from '@aws-sdk/client-s3';
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
-import { Conversation } from './schemas/conversation.schema';
-import { ConversationDocument } from './types';
+import { Connection, Model, Types } from 'mongoose';
 import { AppException } from 'src/utils/exceptions/app.exception';
-import { UserService } from '../user/user.service';
-import { UserDocument } from '../user/types';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { Providers } from 'src/utils/types';
-import { S3Client } from '@aws-sdk/client-s3';
 import { FeedService } from '../feed/feed.service';
 import { MessageService } from '../message/message.service';
 import { BlockList } from '../user/schemas/user.blocklist.schema';
+import { UserDocument } from '../user/types';
+import { UserService } from '../user/user.service';
+import { Conversation } from './schemas/conversation.schema';
+import { ConversationDocument } from './types';
 import { getConversationPipeline, isBlockedPipeline } from './utils/pipelines';
 
 @Injectable()
@@ -70,7 +70,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
                 throw error;
             }
         } finally {
-            await session.endSession();
+            session.endSession();
         }
     };
     

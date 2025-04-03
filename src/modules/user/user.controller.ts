@@ -1,16 +1,16 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { UserService } from './user.service';
-import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
-import { CheckType } from './types';
-import { UserStatusDTO } from './dtos/user.status.dto';
-import { UserNameDto } from './dtos/user.name.dto';
-import { Pagination } from 'src/utils/decorators/pagination.decorator.';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { filePipe } from './constants';
-import { CONVERSATION_EVENTS } from '../conversation/types';
 import { paramPipe } from 'src/utils/constants';
+import { Pagination } from 'src/utils/decorators/pagination.decorator.';
+import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { CONVERSATION_EVENTS } from '../conversation/types';
+import { filePipe } from './constants';
+import { UserNameDto } from './dtos/user.name.dto';
+import { UserStatusDTO } from './dtos/user.status.dto';
+import { CheckType } from './types';
+import { UserService } from './user.service';
 
 @Controller(Routes.USER)
 export class UserController {

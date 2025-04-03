@@ -1,6 +1,7 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { MongoError, MongoErrorLabel } from 'mongodb';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { defaultSuccessResponse, recipientProjection } from 'src/utils/constants';
 import { AppException } from 'src/utils/exceptions/app.exception';
@@ -107,7 +108,9 @@ export class UserService extends BaseService<UserDocument, User> {
         return defaultSuccessResponse;
     };
 
-    changeAvatar = async ({ initiator, file }: { initiator: UserDocument; file: Express.Multer.File }) => {
+    changeAvatar = async (dto: { initiator: UserDocument; file: Express.Multer.File }) => {
+        const { file, initiator } = dto;
+
         const key = `users/${initiator._id.toString()}/avatars/${process.env.NODE_ENV === 'dev' ? Date.now() : crypto.randomUUID()}`;
         const url = `${process.env.BUCKET_PUBLIC_ENDPOINT}/${key}`
 
@@ -124,21 +127,27 @@ export class UserService extends BaseService<UserDocument, User> {
         session.startTransaction();
 
         try {
-            const newFile = await this.fileService.create([{ key, url, mimetype: file.mimetype, size: file.size }], { session });
+            const newFile = (await this.fileService.create([{ key, url, mimetype: file.mimetype, size: file.size }], { session }))[0];
 
-            initiator.avatar && await this.fileService.deleteMany({ _id: initiator.avatar }); // anyways we store old avatar in storage but delete it from db just in case if we want keep old avatar we should keep it in db
+            initiator.avatar && await this.fileService.deleteMany({ _id: initiator.avatar }); // we store old avatar in storage but delete it from db just in case if we want keep old avatar we should keep it in db
             
             await initiator.updateOne({ avatar: newFile._id });
             
-            await session.commitTransaction();
+            await BaseService.commitWithRetry(session);
 
             return { _id: newFile._id.toString(), url }
         } catch (error) {
-            await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                
+                return this.changeAvatar(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
-            await session.endSession();
+            session.endSession();
         }
     }
 
