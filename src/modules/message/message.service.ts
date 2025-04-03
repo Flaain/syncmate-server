@@ -362,7 +362,12 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                     populate: {
                         path: 'lastMessage',
                         model: 'Message',
-                        select: 'sender text',
+                        select: 'text',
+                        populate: {
+                            path: 'sender',
+                            model: 'User',
+                            select: 'name',
+                        }
                     },
                 },
             });
@@ -381,10 +386,10 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             isLastMessage && (await conversation.updateOne({ lastMessage, lastMessageSentAt }, { session }));
 
-            await this.feedService.findOneAndUpdate({
+            isLastMessage && await this.feedService.findOneAndUpdate({
                 filter: { item: conversation._id },
                 update: { lastActionAt: lastMessageSentAt },
-                options: { returnDocument: 'after', session },
+                options: { session },
             });
 
             await BaseService.commitWithRetry(session);
