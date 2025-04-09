@@ -11,6 +11,7 @@ export class RefreshGuard implements CanActivate {
         private readonly authService: AuthService,
         private readonly sessionService: SessionService,
     ) {}
+    
     canActivate = async (context: ExecutionContext) => {
         const request = context.switchToHttp().getRequest<Request>();
         const token = this.extractTokenFromCookies(request);

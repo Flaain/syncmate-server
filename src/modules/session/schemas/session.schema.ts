@@ -1,5 +1,5 @@
-import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import mongoose from 'mongoose';
 import { DatesService } from 'src/utils/services/dates/dates.service';
 
 @Schema({ timestamps: true })
@@ -8,7 +8,7 @@ export class Session {
     userId: mongoose.Types.ObjectId;
     
     @Prop({ type: String })
-    userAgent?: string;
+    userAgent: string;
     
     @Prop({ type: String })
     userIP: string;
