@@ -17,6 +17,7 @@ import { OtpModule } from './modules/otp/otp.module';
 import { SessionModule } from './modules/session/session.module';
 import { UserModule } from './modules/user/user.module';
 import { BucketModule } from './utils/services/bucket/bucket.module';
+import { UAParserModule } from './utils/services/uaparser/uaparser.module';
 
 @Module({
     imports: [
@@ -25,6 +26,7 @@ import { BucketModule } from './utils/services/bucket/bucket.module';
         SessionModule,
         UserModule,
         FeedModule,
+        UAParserModule.forRoot(),
         BucketModule.forRoot({
             region: process.env.STORAGE_REGION,
             endpoint: process.env.STORAGE_ENDPOINT,

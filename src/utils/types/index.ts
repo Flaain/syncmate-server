@@ -29,6 +29,7 @@ export enum Routes {
 export enum Providers {
     PARSER_CLIENT = 'PARSER_CLIENT',
     S3_CLIENT = 'S3_CLIENT',
+    UA_PARSER = 'UA_PARSER',
 }
 
 export enum Cookies {
