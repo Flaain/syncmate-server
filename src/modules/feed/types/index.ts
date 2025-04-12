@@ -1,6 +1,7 @@
 import { HydratedDocument, SchemaTimestampsConfig, Types } from 'mongoose';
 import { ConversationDocument } from 'src/modules/conversation/types';
 import { UserDocument } from 'src/modules/user/types';
+import { FeedConfig } from '../schemas/feed.config.schema';
 import { Feed } from '../schemas/feed.schema';
 
 export enum FEED_TYPE {
@@ -31,6 +32,7 @@ export interface FeedWrapper<T> {
 }
 
 export type FeedDocument = HydratedDocument<Feed> & SchemaTimestampsConfig;
+export type FeedConfigDocument = HydratedDocument<FeedConfig> & SchemaTimestampsConfig;
 
 export interface GetFeedParams {
     initiatorId: Types.ObjectId;
@@ -38,6 +40,7 @@ export interface GetFeedParams {
 }
 
 export interface GetFeedPipelineParams {
+    ids: Array<Types.ObjectId>;
     initiatorId: string | Types.ObjectId;
     cursor?: string;
     limit?: number;

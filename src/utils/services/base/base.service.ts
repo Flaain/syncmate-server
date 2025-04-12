@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { MongoError, MongoErrorLabel } from 'mongodb';
-import { FindQuery, UpdateQuery } from 'src/utils/types';
 import {
     AggregateOptions,
     ClientSession,
@@ -14,6 +13,7 @@ import {
     RootFilterQuery,
     Types,
 } from 'mongoose';
+import { FindQuery, UpdateQuery } from 'src/utils/types';
 
 @Injectable()
 export class BaseService<Doc extends Document, Entity> {

@@ -12,7 +12,7 @@ import { UserDocument } from '../user/types';
 import { UserService } from '../user/user.service';
 import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Message } from './schemas/message.schema';
-import { EditMessageParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
+import { EditMessageParams, HandleFeedParams, MessageDocument, MessageSourceRefPath, SendMessageParams } from './types';
 
 @Injectable()
 export class MessageService extends BaseService<MessageDocument, Message> {
@@ -46,6 +46,32 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         ], 
         { session }
     );
+
+    private handleFeed = async ({ conversationId, initiatorId, recipientId, lastActionAt, session, isNewConversation }: HandleFeedParams) => {
+        if (isNewConversation) {
+            const { _id } = (await this.feedService.create(
+                [
+                    {
+                        item: conversationId,
+                        type: FEED_TYPE.CONVERSATION,
+                        configs: (await this.feedService.createConfigs([{ userId: initiatorId }, { userId: recipientId }], { session })).map((c) => c._id),
+                        lastActionAt,
+                    },
+                ],
+                { session },
+            ))[0];
+
+            return _id;
+        } else {
+            const { _id } = await this.feedService.findOneAndUpdate({
+                filter: { item: conversationId },
+                update: { lastActionAt },
+                options: { returnDocument: 'after', session },
+            });
+
+            return _id;
+        }
+    }
 
     send = async (dto: SendMessageParams) => {
         const { message, initiator, recipientId } = dto;
@@ -88,25 +114,14 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 )
             )[0];
 
-            const { _id, type, lastActionAt } = ctx.isNewConversation
-                ? (
-                      await this.feedService.create(
-                          [
-                              {
-                                  item: ctx.conversation._id,
-                                  type: FEED_TYPE.CONVERSATION,
-                                  users: [initiator._id, recipient._id],
-                                  lastActionAt: newMessage.createdAt,
-                              },
-                          ],
-                          { session },
-                      )
-                  )[0]
-                : await this.feedService.findOneAndUpdate({
-                      filter: { item: ctx.conversation._id },
-                      update: { lastActionAt: newMessage.createdAt },
-                      options: { returnDocument: 'after', session },
-                  });
+            const _id = await this.handleFeed({ 
+                session,  
+                conversationId: ctx.conversation._id, 
+                initiatorId: initiator._id,
+                recipientId: recipient._id,
+                lastActionAt: newMessage.createdAt,
+                isNewConversation: ctx.isNewConversation
+            });
 
             await ctx.conversation.updateOne(
                 {
@@ -127,8 +142,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 unread_initiator: unread.find(({ _id }) => _id.toString() === recipient._id.toString())?.count,
                 feedItem: {
                     _id,
-                    type,
-                    lastActionAt,
+                    type: FEED_TYPE.CONVERSATION,
+                    lastActionAt: newMessage.createdAt,
                     item: {
                         _id: ctx.conversation._id,
                         lastMessage: {

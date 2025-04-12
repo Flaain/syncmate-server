@@ -1,25 +1,25 @@
-import { z } from 'zod';
-import { Connection, Types } from 'mongoose';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { WithUserAgent } from './types';
-import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { JWT_KEYS } from 'src/utils/types';
+import { JwtService, TokenExpiredError } from '@nestjs/jwt';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
+import { defaultSuccessResponse } from 'src/utils/constants';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BcryptService } from 'src/utils/services/bcrypt/bcrypt.service';
+import { JWT_KEYS } from 'src/utils/types';
+import { z } from 'zod';
+import { OtpService } from '../otp/otp.service';
+import { OtpType } from '../otp/types';
+import { SessionService } from '../session/session.service';
+import { SessionDocument } from '../session/types';
+import { UserDocument } from '../user/types';
+import { UserService } from '../user/user.service';
 import { incorrectPasswordError, otpError } from './constants';
+import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { SigninDTO } from './dtos/auth.signin.dto';
 import { SignupDTO } from './dtos/auth.signup.dto';
-import { UserService } from '../user/user.service';
-import { OtpService } from '../otp/otp.service';
-import { SessionService } from '../session/session.service';
-import { OtpType } from '../otp/types';
-import { UserDocument } from '../user/types';
-import { SessionDocument } from '../session/types';
-import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
-import { defaultSuccessResponse } from 'src/utils/constants';
-import { InjectConnection } from '@nestjs/mongoose';
+import { WithUserAgent } from './types';
 
 @Injectable()
 export class AuthService {
@@ -57,7 +57,7 @@ export class AuthService {
 
         const session = await this.sessionService.create({ userId: user._id, userAgent, userIP });
         const { password: _, ...restUser } = user;
-
+        
         return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
     }
 

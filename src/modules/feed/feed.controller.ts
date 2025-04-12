@@ -1,8 +1,8 @@
 import { Controller, Get, Query, Req } from '@nestjs/common';
-import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
-import { FeedService } from './feed.service';
 import { Pagination } from 'src/utils/decorators/pagination.decorator.';
+import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { FeedService } from './feed.service';
 
 @Auth()
 @Controller(Routes.FEED)
