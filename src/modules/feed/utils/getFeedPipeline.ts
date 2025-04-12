@@ -35,10 +35,19 @@ export const getFeedSearchPipeline = ({ initiatorId, query }: Pick<SearchPipelin
     { $sort: { createdAt: -1 } },
 ];
 
-export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipelineParams): Array<PipelineStage> => [
-    { $match: { users: initiatorId, ...(cursor && { lastActionAt: { $lt: new Date(cursor) } }) } },
+export const getFeedPipeline = ({ initiatorId, ids, cursor, limit = 10 }: GetFeedPipelineParams): Array<PipelineStage> => [
+    { $match: { configs: { $in: ids }, ...(cursor && { lastActionAt: { $lt: new Date(cursor) } }) } },
     { $sort: { lastActionAt: -1 } },
     { $limit: limit },
+    {
+        $lookup: {
+            from: 'feed_configs',
+            localField: 'configs',
+            foreignField: '_id',
+            as: 'config',
+            pipeline: [{ $match: { userId: initiatorId } }, { $project: { _id: 1 } }],
+        },
+    },
     {
         $lookup: {
             from: 'conversations',
@@ -121,5 +130,6 @@ export const getFeedPipeline = ({ initiatorId, cursor, limit = 10 }: GetFeedPipe
         },
     },
     { $unset: ['conversation', '_temporaryCloud'] },
-    { $project: { _id: 1, type: 1, lastActionAt: 1, item: 1 } },
+    { $unwind: { path: '$config', preserveNullAndEmptyArrays: true } },
+    { $project: { _id: 1, type: 1, lastActionAt: 1, item: 1, config_id: '$config._id' } },
 ];

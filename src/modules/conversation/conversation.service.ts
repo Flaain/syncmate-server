@@ -30,8 +30,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
     }
 
     deleteConversation = async (dto: { initiatorId: Types.ObjectId; recipientId: string }) => {
-        const { initiatorId, recipientId } = dto;
-        const session = await this.connection.startSession();
+        const { initiatorId, recipientId } = dto, session = await this.connection.startSession();
         
         session.startTransaction();
 
@@ -49,14 +48,17 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
             });
 
             if (!conversation) throw new AppException({ message: 'Conversation not found' }, HttpStatus.NOT_FOUND);
-
+            
             await conversation.deleteOne({ session });
             await this.messageService.deleteMany({ source: conversation._id }, { session });
-            await this.feedService.findOneAndDelete({ users: { $all: [initiatorId, recipientId] }, item: conversation._id }, { session });
-            // as mongoose docs says - "Running operations in parallel is not supported during a transaction" so i can't use Promise.all
-            // https://mongoosejs.com/docs/transactions.html#note-about-parallelism-in-transactions 
 
-            BaseService.commitWithRetry(session);
+            const feed = await this.feedService.findOneAndDelete({ item: conversation._id }, { session, projection: { configs: 1 }, returnDocument: 'after' });
+
+            if (!feed) throw new AppException({ message: 'Feed not found' }, HttpStatus.NOT_FOUND);
+            
+            await this.feedService.deleteConfigs({ _id: { $in: feed.configs } }, { session });
+
+            await BaseService.commitWithRetry(session);
 
             return { _id: conversation._id, recipientId: recipient._id.toString() };
         } catch (error) {

@@ -1,8 +1,7 @@
-import mongoose, { SchemaTimestampsConfig, Types } from 'mongoose';
+import mongoose, { HydratedDocument, SchemaTimestampsConfig, Types } from 'mongoose';
 import { Session } from '../schemas/session.schema';
-import { Document } from 'mongoose';
 
-export type SessionDocument = Session & Document & SchemaTimestampsConfig;
+export type SessionDocument = HydratedDocument<Session> & SchemaTimestampsConfig;
 
 export interface ISession {
     _id: mongoose.Types.ObjectId;
