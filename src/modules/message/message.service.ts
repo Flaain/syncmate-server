@@ -66,7 +66,7 @@ export class MessageService extends BaseService<MessageDocument, Message> {
             const { _id } = await this.feedService.findOneAndUpdate({
                 filter: { item: conversationId },
                 update: { lastActionAt },
-                options: { returnDocument: 'after', session },
+                options: { returnDocument: 'after', session, projection: { _id: 1 } },
             });
 
             return _id;
@@ -234,10 +234,10 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 )
             )[0];
 
-            const { _id, type, lastActionAt } = await this.feedService.findOneAndUpdate({
+            const { _id } = await this.feedService.findOneAndUpdate({
                 filter: { item: conversation._id },
                 update: { lastActionAt: newMessage.createdAt },
-                options: { returnDocument: 'after', session },
+                options: { returnDocument: 'after', session, projection: { _id: 1 } },
             });
 
             const unread = await this.getUnreadMessagesForConversationParticipants(conversation._id, session);
@@ -260,8 +260,8 @@ export class MessageService extends BaseService<MessageDocument, Message> {
                 unread_initiator: unread.find(({ _id }) => _id.toString() === recipient._id.toString())?.count,
                 feedItem: {
                     _id,
-                    type,
-                    lastActionAt,
+                    type: FEED_TYPE.CONVERSATION,
+                    lastActionAt: newMessage.createdAt,
                     item: {
                         _id: conversation._id,
                         lastMessage: {

@@ -6,9 +6,6 @@ import { FEED_TYPE } from '../types';
 export class Feed {
     @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId }], ref: 'FeedConfig', required: true })
     configs: Array<mongoose.Types.ObjectId>;
-
-    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId }], ref: 'User' })
-    users?: Array<mongoose.Types.ObjectId>;
     
     @Prop({ type: mongoose.Schema.Types.ObjectId, refPath: 'type', required: true, index: { unique: true } })
     item: mongoose.Types.ObjectId;

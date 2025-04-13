@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, CreateOptions, InsertManyOptions, Model, RootFilterQuery, Types } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { CreateOptions, InsertManyOptions, Model, RootFilterQuery, Types } from 'mongoose';
 import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { SearchPipelineParams } from 'src/utils/types';
@@ -14,7 +14,6 @@ import { getFeedPipeline, getFeedSearchPipeline } from './utils/getFeedPipeline'
 export class FeedService extends BaseService<FeedDocument, Feed> {
     constructor(
         private readonly userService: UserService,
-        @InjectConnection() private readonly connection: Connection,
         @InjectModel(Feed.name) private readonly feedModel: Model<FeedDocument>,
         @InjectModel(FeedConfig.name) private readonly feedConfigModel: Model<FeedConfigDocument>,
     ) {
