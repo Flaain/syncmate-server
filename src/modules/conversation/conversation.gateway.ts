@@ -1,12 +1,9 @@
-import { OnEvent } from '@nestjs/event-emitter';
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import { getRoomIdByParticipants } from 'src/utils/helpers/getRoomIdByParticipants';
-import { FEED_EVENTS } from '../feed/types';
+import { FEED_EVENTS, FEED_TYPE, LAYOUT_EVENTS } from '../feed/types';
 import { GATEWAY_OPTIONS, GatewayService } from '../gateway/gateway.service';
-import { SocketWithUser } from '../gateway/types';
 import { UserService } from '../user/user.service';
-import { ConversationService } from './conversation.service';
 import {
     CONVERSATION_EVENTS,
     ConversationCreateParams,
@@ -15,37 +12,35 @@ import {
     ConversationEditMessageParams,
     ConversationMessageReadParams,
     ConversationSendMessageParams,
+    ConversationTypingParams
 } from './types';
+import { AppException } from 'src/utils/exceptions/app.exception';
+import { HttpStatus } from '@nestjs/common';
+import { SocketWithUser } from '../gateway/types';
+import { conversationTypingSchema } from './schemas/conversation.typing.schema';
+import { conversationRecipientSchema } from './schemas/conversation.recipient.schema';
+import { OnEvent } from '@nestjs/event-emitter';
 
 @WebSocketGateway(GATEWAY_OPTIONS)
 export class ConversationGateway {
     @WebSocketServer()
-    readonly server: Server; // we can use attached server or just use from this.gatewayService.server cuz it's the same instance
+    readonly server: Server;
 
-    constructor(
-        private readonly conversationService: ConversationService,
-        private readonly userService: UserService,
-        private readonly gatewayService: GatewayService,
-    ) {}
+    constructor(private readonly userService: UserService, private readonly gatewayService: GatewayService) {}
 
     @SubscribeMessage(CONVERSATION_EVENTS.JOIN)
-    async handleJoinConversation(
-        @MessageBody() { recipientId }: { recipientId: string },
-        @ConnectedSocket() client: Socket,
-    ) {
-        try {
-            const recipient = await this.userService.findById(recipientId);
+    async onJoin(@MessageBody() dto: { recipientId: string }, @ConnectedSocket() client: SocketWithUser) {
+        const { recipientId } = conversationRecipientSchema.parse(dto);
 
-            if (!recipient) throw new Error('recipient not found');
+        if (!(await this.userService.findById(recipientId))) throw new AppException({ message: 'recipient not found' }, HttpStatus.NOT_FOUND);
 
-            client.join(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
-        } catch (error) {
-            // client.emit(`error`, { error: error.message });
-        }
+        client.join(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
     }
 
     @SubscribeMessage(CONVERSATION_EVENTS.LEAVE)
-    handleLeaveConversation(@MessageBody() { recipientId }: { recipientId: string }, @ConnectedSocket() client: Socket) {
+    onLeave(@MessageBody() dto: { recipientId: string }, @ConnectedSocket() client: SocketWithUser) {
+        const { recipientId } = conversationRecipientSchema.parse(dto);
+
         client.leave(getRoomIdByParticipants([client.data.user._id.toString(), recipientId]));
     }
 
@@ -54,19 +49,19 @@ export class ConversationGateway {
         this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_READ, { _id: messageId, readedAt });
 
         for (let i = 0, sockets = this.gatewayService.sockets.get(initiatorId); i < sockets?.length; i += 1) {
-            sockets[i].emit(FEED_EVENTS.UNREAD_COUNTER, { itemId: conversationId, action: 'dec', ctx: 'conversation' });
+            sockets[i].emit(FEED_EVENTS.UNREAD_COUNTER, { itemId: conversationId, action: 'dec', ctx: FEED_TYPE.CONVERSATION });
         }
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_SEND)
-    onNewMessage({ initiator, session_id, unread_initiator, unread_recipient, feedItem }: ConversationSendMessageParams) {
+    onMessageSend({ initiator, session_id, unread_initiator, unread_recipient, feedItem }: ConversationSendMessageParams) {
         const initiatorId = initiator._id.toString();
         const recipientId = feedItem.item.recipient._id.toString();
         const roomId = getRoomIdByParticipants([initiatorId, recipientId]);
 
         (this.gatewayService.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(roomId).emit(CONVERSATION_EVENTS.MESSAGE_SEND, feedItem.item.lastMessage);
         
-        this.server.to(roomId).emit(CONVERSATION_EVENTS.STOP_TYPING);
+        this.server.to(roomId).emit(CONVERSATION_EVENTS.TYPING_STOP);
 
         for (let i = 0, sockets = [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)]; i < sockets.length; i += 1) {
             for (let j = 0, s = sockets[i]; j < s?.length; j += 1) {
@@ -86,7 +81,7 @@ export class ConversationGateway {
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_EDIT)
-    onEditMessage({
+    onMessageEdit({
         _id,
         isLastMessage,
         conversationId,
@@ -97,18 +92,26 @@ export class ConversationGateway {
         recipientId,
     }: ConversationEditMessageParams) {
         (this.gatewayService.sockets.get(initiatorId).find((socket) => socket.handshake.query.session_id === session_id) ?? this.server).to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.MESSAGE_EDIT, { _id, text, updatedAt });
+        
+        for (let i = 0, sockets = [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)]; i < sockets.length; i += 1) {
+            for (let j = 0, s = sockets[i]; j < s?.length; j += 1) {
+                const socket = s[j];
 
-        if (isLastMessage) {
-            for (let i = 0, sockets = [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)]; i < sockets.length; i += 1) {
-                for (let j = 0, s = sockets[i]; j < s?.length; j += 1) {
-                    s[j].emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage: { text, updatedAt, hasBeenEdited: true } })
-                }
+                socket.emit(LAYOUT_EVENTS.UPDATE_DRAFT, { 
+                    _id,
+                    text,
+                    updatedAt,
+                    type: 'edit',
+                    recipientId: socket.data.user._id.toString() === initiatorId ? recipientId : initiatorId
+                });
+
+                isLastMessage && s[j].emit(FEED_EVENTS.UPDATE, { itemId: conversationId, lastMessage: { text, updatedAt, hasBeenEdited: true } });
             }
         }
     }
 
     @OnEvent(CONVERSATION_EVENTS.MESSAGE_DELETE)
-    handleDeleteMessage({
+    onMessageDelete({
         initiatorId,
         recipientId,
         unreadMessages,
@@ -122,32 +125,33 @@ export class ConversationGateway {
 
         for (let i = 0, sockets = [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)]; i < sockets.length; i += 1) {
             for (let j = 0, s = sockets[i]; j < s?.length; j += 1) {
-                const socket = s[j];
+                const socket = s[j], isInitiator = socket.data.user._id.toString() === initiatorId;
+
+                socket.emit(LAYOUT_EVENTS.UPDATE_DRAFT, { 
+                    messageIds: findedMessageIds, 
+                    recipientId: isInitiator ? recipientId : initiatorId, 
+                    type: 'delete' 
+                });
 
                 isLastMessage && socket.emit(FEED_EVENTS.UPDATE, { 
                     lastMessage, 
                     itemId: conversationId,
                     lastActionAt: lastMessageSentAt, 
-                    shouldSort: isLastMessage 
+                    shouldSort: true 
                 });
 
-                !(socket.data.user._id.toString() === initiatorId) && socket.emit(FEED_EVENTS.UNREAD_COUNTER, { 
-                    action: 'set', 
-                    ctx: 'conversation', 
-                    itemId: conversationId, 
-                    count: unreadMessages 
-                });
+                !isInitiator && socket.emit(FEED_EVENTS.UNREAD_COUNTER, { action: 'set', itemId: conversationId, count: unreadMessages });
             }
         }
     }
 
     @OnEvent(CONVERSATION_EVENTS.CREATED)
-    onConversationCreated({ initiatorId, recipientId, conversationId }: ConversationCreateParams) {
+    onCreate({ initiatorId, recipientId, conversationId }: ConversationCreateParams) {
         this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.CREATED, conversationId);
     }
 
     @OnEvent(CONVERSATION_EVENTS.DELETED)
-    onConversationDeleted({ initiatorId, recipientId, conversationId }: ConversationDeleteParams) {
+    onDelete({ initiatorId, recipientId, conversationId }: ConversationDeleteParams) {
         this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.DELETED);
 
         for (let i = 0, sockets = [this.gatewayService.sockets.get(initiatorId), this.gatewayService.sockets.get(recipientId)]; i < sockets.length; i += 1) {
@@ -165,16 +169,14 @@ export class ConversationGateway {
         this.server.to(getRoomIdByParticipants([initiatorId, recipientId])).emit(CONVERSATION_EVENTS.USER_UNBLOCK, recipientId);
     }
 
-    @SubscribeMessage(CONVERSATION_EVENTS.START_TYPING)
-    async onStartTyping(
-        @MessageBody() { conversationId, recipientId }: { conversationId: string; recipientId: string },
-        @ConnectedSocket() client: SocketWithUser,
-    ) {
+    @SubscribeMessage(CONVERSATION_EVENTS.TYPING_START)
+    onTypingStart(@MessageBody() dto: ConversationTypingParams, @ConnectedSocket() client: SocketWithUser) {
         // if (!(await this.conversationService.exists({ _id: conversationId, participants: { $all: [client.data.user._id, recipientId] } }))) return;
-
+        const { recipientId, conversationId } = conversationTypingSchema.parse(dto);
+        
         const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
 
-        client.to(roomId).emit(CONVERSATION_EVENTS.START_TYPING, client.data.user._id.toString());
+        client.to(roomId).emit(CONVERSATION_EVENTS.TYPING_START, client.data.user._id.toString());
 
         for (let i = 0, sockets = this.gatewayService.sockets.get(recipientId); i < sockets?.length; i += 1) {
             const socket = sockets[i];
@@ -186,12 +188,21 @@ export class ConversationGateway {
         }
     }
 
-    @SubscribeMessage(CONVERSATION_EVENTS.STOP_TYPING)
-    onStopTyping(@MessageBody() { recipientId, conversationId }: { conversationId: string; recipientId: string }, @ConnectedSocket() client: SocketWithUser) {
-        client.to(getRoomIdByParticipants([client.data.user._id.toString(), recipientId])).emit(CONVERSATION_EVENTS.STOP_TYPING);
+    @SubscribeMessage(CONVERSATION_EVENTS.TYPING_STOP)
+    onTypingStop(@MessageBody() dto: ConversationTypingParams, @ConnectedSocket() client: SocketWithUser) {
+        const { recipientId, conversationId } = conversationTypingSchema.parse(dto);
+        
+        const roomId = getRoomIdByParticipants([client.data.user._id.toString(), recipientId]);
+        
+        client.to(roomId).emit(CONVERSATION_EVENTS.TYPING_STOP);
 
         for (let i = 0, sockets = this.gatewayService.sockets.get(recipientId); i < sockets?.length; i += 1) {
-            sockets[i].emit(FEED_EVENTS.STOP_TYPING, { _id: conversationId, participant: { _id: client.data.user._id.toString() } });
+            const socket = sockets[i];
+
+            !socket.rooms.has(roomId) && socket.emit(FEED_EVENTS.STOP_TYPING, {
+                _id: conversationId,
+                participant: { _id: client.data.user._id.toString() },
+            });
         }
     }
 }

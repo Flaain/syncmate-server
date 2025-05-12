@@ -10,6 +10,10 @@ export enum FEED_TYPE {
     ADS = 'ADS'
 }
 
+export enum LAYOUT_EVENTS {
+    UPDATE_DRAFT = 'layout.draft.update'
+}
+
 export enum FEED_EVENTS {
     CREATE = 'feed.create',
     UPDATE = 'feed.update',

@@ -40,6 +40,8 @@ export class FeedService extends BaseService<FeedDocument, Feed> {
         return { feed, nextCursor: config.nextCursor };
     };
 
+    getArchivedChatsSize = async (initiatorId: Types.ObjectId) => this.feedConfigModel.countDocuments({ userId: initiatorId, is_archived: true });
+    
     createConfig = async (doc: FeedConfigDocument, options?: CreateOptions) => this.feedConfigModel.create([doc], options);
     createConfigs = async (docs: Array<FeedConfig>, options?: InsertManyOptions) => this.feedConfigModel.insertMany(docs, options);
     deleteConfigs = async (filter: RootFilterQuery<FeedConfigDocument>, options?: any) => this.feedConfigModel.deleteMany(filter, options); 

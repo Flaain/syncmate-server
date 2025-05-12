@@ -5,7 +5,6 @@ import { FeedModule } from '../feed/feed.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { MessageModule } from '../message/message.module';
 import { BlockList, BlockListSchema } from '../user/schemas/user.blocklist.schema';
-import { User, UserSchema } from '../user/schemas/user.schema';
 import { UserModule } from '../user/user.module';
 import { ConversationController } from './conversation.controller';
 import { ConversationGateway } from './conversation.gateway';
@@ -18,7 +17,6 @@ import { Conversation, ConversationSchema } from './schemas/conversation.schema'
         FeedModule,
         MongooseModule.forFeature([
             { name: Conversation.name, schema: ConversationSchema },
-            { name: User.name, schema: UserSchema },
             { name: BlockList.name, schema: BlockListSchema },
         ]),
         forwardRef(() => GatewayModule),

@@ -2,6 +2,7 @@ import { PipeTransform } from '@nestjs/common';
 import { z } from 'zod';
 import { AppException } from '../exceptions/app.exception';
 import { validateParamId } from '../helpers/validateParamId';
+import { isValidObjectId } from 'mongoose';
 
 export const MESSAGES_BATCH = 25;
 
@@ -28,6 +29,8 @@ export const noSearchResults: Pick<AppException, 'message'> = {
 
 export const otpForSchema = z.string().trim().length(6, 'Invalid OTP code');
 
+export const validObjId = z.string({ required_error: 'id is required' }).max(24, 'id is invalid').refine((id) => isValidObjectId(id), { message: `Invalid object id` })
+
 export const passwordForSchema = z
     .string()
     .trim()
@@ -36,9 +39,8 @@ export const passwordForSchema = z
     .max(32, 'Password must be at most 32 characters long');
 
 export const nameForSchema = z
-    .string()
+    .string({ required_error: 'Name is required' })
     .trim()
-    .min(1, 'Name is required')
     .max(32, 'Name must be at most 32 characters long');
     
 export const searchSchema = z.strictObject({

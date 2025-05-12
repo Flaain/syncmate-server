@@ -9,10 +9,7 @@ import { Auth } from '../auth/decorators/auth.decorator';
 @Auth()
 @Controller(Routes.CONVERSATION)
 export class ConversationController {
-    constructor(
-        private readonly conversationService: ConversationService,
-        private readonly eventEmitter: EventEmitter2,
-    ) {}
+    constructor(private readonly conversationService: ConversationService, private readonly eventEmitter: EventEmitter2) {}
 
     @Delete('delete/:id')
     async delete(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {

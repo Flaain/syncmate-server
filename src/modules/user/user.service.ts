@@ -11,12 +11,11 @@ import { Providers } from 'src/utils/types';
 import { z } from 'zod';
 import { FileService } from '../file/file.service';
 import { checkErrors } from './constants';
-import { UserNameDto } from './dtos/user.name.dto';
-import { UserStatusDTO } from './dtos/user.status.dto';
 import { BlockList } from './schemas/user.blocklist.schema';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { User } from './schemas/user.schema';
 import { UserDocument, UserSearchParams } from './types';
+import { UserEditDTO } from './dtos/user.edit.dto';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
@@ -92,21 +91,25 @@ export class UserService extends BaseService<UserDocument, User> {
         return defaultSuccessResponse;
     };
 
-    status = async ({ initiator, status }: UserStatusDTO & { initiator: UserDocument }) => {
-        const trimmedStatus = status.trim();
+    edit = async (dto: UserEditDTO, initiator: UserDocument) => {
+        const updates = { $set: {}, $unset: {} };
 
-        if (initiator.status === trimmedStatus) return defaultSuccessResponse;
+        for (const key in dto) {
+            if (dto.hasOwnProperty(key)) {
+                const trimmedValue = dto[key].trim();
 
-        await initiator.updateOne({ status: trimmedStatus.length ? trimmedStatus : undefined });
+                trimmedValue.length ? (updates.$set[key] = trimmedValue) : (updates.$unset[key] = '')
+            }
+        }
 
-        return defaultSuccessResponse
-    };
+        const data = await this.findOneAndUpdate({ 
+            filter: { _id: initiator._id }, 
+            options: { returnDocument: 'after', projection: Object.keys(dto).join(' ') },
+            update: updates
+        });
 
-    name = async ({ initiator, name }: UserNameDto & { initiator: UserDocument }) => {
-        await initiator.updateOne({ name });
-
-        return defaultSuccessResponse;
-    };
+        return { ...updates.$unset, ...data.toObject() };
+    }
 
     changeAvatar = async (dto: { initiator: UserDocument; file: Express.Multer.File }) => {
         const { file, initiator } = dto;

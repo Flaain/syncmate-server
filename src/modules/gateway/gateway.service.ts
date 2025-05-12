@@ -75,7 +75,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
                 return next();
             } catch (error) {
                 console.log(error);
-                return next(error);
+                return next({ message: 'Unauthorized', name: 'Unauthorized_Exception', data: error });
             }
         });
     }
@@ -112,7 +112,7 @@ export class GatewayService implements OnGatewayInit, OnGatewayConnection, OnGat
 
             recipientSockets?.forEach((socket) => socket.emit(FEED_EVENTS.USER_PRESENCE, { recipientId: initiatorId.toString(), presence }));
             
-            client.to(getRoomIdByParticipants([initiatorId.toString(), recipientId])).emit(CONVERSATION_EVENTS.PRESENCE, { presence, lastSeenAt });
+            client.to(getRoomIdByParticipants([initiatorId.toString(), recipientId])).emit(CONVERSATION_EVENTS.USER_PRESENCE, { presence, lastSeenAt });
         });
     }
 

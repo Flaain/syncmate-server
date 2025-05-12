@@ -1,11 +1,7 @@
 import { PipelineStage, Types } from 'mongoose';
 import { MESSAGES_BATCH } from 'src/utils/constants';
 
-export const getConversationPipeline = (
-    initiatorId: Types.ObjectId,
-    recipientId: Types.ObjectId,
-    cursor?: string,
-): Array<PipelineStage> => [
+export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId: Types.ObjectId, cursor?: string): Array<PipelineStage> => [
     { $match: { participants: { $all: [initiatorId, recipientId] } } },
     {
         $lookup: {
@@ -88,7 +84,13 @@ export const getConversationPipeline = (
     {
         $addFields: {
             messages: {
-                data: { $reverseArray: '$m' },
+                data: { 
+                    $map: {
+                        input: { $reverseArray: '$m' },
+                        as: 'msg',
+                        in: ['$$msg._id', '$$msg']
+                    }
+                },
                 nextCursor: {
                     $cond: {
                         if: { $eq: [{ $size: '$m' }, MESSAGES_BATCH] },

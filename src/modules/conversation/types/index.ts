@@ -14,11 +14,16 @@ export enum CONVERSATION_EVENTS {
     MESSAGE_DELETE = 'conversation.message.delete',
     CREATED = 'conversation.created',
     DELETED = 'conversation.deleted',
-    PRESENCE = 'conversation.user.presence',
+    USER_PRESENCE = 'conversation.user.presence',
     USER_BLOCK = 'conversation.user.block',
     USER_UNBLOCK = 'conversation.user.unblock',
-    START_TYPING = 'conversation.start.typing',
-    STOP_TYPING = 'conversation.stop.typing',
+    TYPING_START = 'conversation.typing.start',
+    TYPING_STOP = 'conversation.typing.stop',
+}
+
+export interface ConversationTypingParams {
+    conversationId: string;
+    recipientId: string;
 }
 
 export interface ConversationDeleteMessageParams {
@@ -57,7 +62,6 @@ export interface ConversationMessageReadParams {
     messageId: string;
     initiatorId: string;
     recipientId: string;
-    session_id: string;
 }
 
 export interface ConversationCreateParams {

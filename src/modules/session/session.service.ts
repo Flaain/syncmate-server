@@ -50,8 +50,12 @@ export class SessionService extends BaseService<SessionDocument, Session> {
             _id === sessionId ? (result.currentSession = data) : result.sessions.push(data);
         }
 
+        result.sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
         return result;
     };
+
+    getSessionsSize = async (initiatorId: Types.ObjectId) => this.countDocuments({ userId: initiatorId, expiresAt: { $gt: Date.now() } });
 
     dropSession = async ({ initiatorUserId, initiatorSessionId, sessionId }: DropSessionParams) => {
         const session = await this.findOneAndDelete({

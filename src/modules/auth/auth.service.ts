@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
+import { MongoError, MongoErrorLabel } from 'mongodb';
 import { defaultSuccessResponse } from 'src/utils/constants';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BcryptService } from 'src/utils/services/bcrypt/bcrypt.service';
@@ -20,6 +21,8 @@ import { SigninDTO } from './dtos/auth.signin.dto';
 import { SignupDTO } from './dtos/auth.signup.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
 import { WithUserAgent } from './types';
+import { FeedService } from '../feed/feed.service';
+import { BaseService } from 'src/utils/services/base/base.service';
 
 @Injectable()
 export class AuthService {
@@ -31,6 +34,7 @@ export class AuthService {
         private readonly otpService: OtpService,
         private readonly sessionService: SessionService,
         private readonly bcryptService: BcryptService,
+        private readonly feedService: FeedService
     ) {}
     
     private signAuthTokens = ({ sessionId, userId }: { sessionId: string; userId: string }) => {
@@ -56,38 +60,57 @@ export class AuthService {
         }
 
         const session = await this.sessionService.create({ userId: user._id, userAgent, userIP });
-        const { password: _, ...restUser } = user;
+
+        const { 0: archived_chats, 1: active_sessions } = (await Promise.allSettled([
+            this.feedService.getArchivedChatsSize(user._id), 
+            this.sessionService.getSessionsSize(user._id)
+        ])).map((v) => v.status === 'fulfilled' ? v.value : 0);
+
+        const { password: _, presence, __v, ...restUser } = user;
         
-        return { user: restUser, ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }) };
+        return {
+            user: { ...restUser, counts: { archived_chats, active_sessions } },
+            ...this.signAuthTokens({ sessionId: session._id.toString(), userId: user._id.toString() }),
+        };
     }
 
-    signup = async ({ password, otp, userAgent, userIP, ...dto }: WithUserAgent<Required<SignupDTO>>) => {     
+    signup = async (dto: WithUserAgent<Required<SignupDTO>>) => {
+        const { password, otp, userAgent, userIP, ...data } = dto;     
         const session = await this.connection.startSession();
         
         session.startTransaction();
         
         try {
-            if (await this.userService.findOne({ filter: { $or: [{ email: dto.email }, { login: dto.login }] }, options: { session } })) {
+            if (await this.userService.findOne({ filter: { $or: [{ email: data.email }, { login: data.login }] }, options: { session } })) {
                 throw new AppException({ message: 'An error occurred during the registration process. Please try again.' }, HttpStatus.BAD_REQUEST);
             }
     
-            if (!await this.otpService.findOneAndDelete({ otp, email: dto.email, type: OtpType.EMAIL_VERIFICATION }, { session })) {
+            if (!await this.otpService.findOneAndDelete({ otp, email: data.email, type: OtpType.EMAIL_VERIFICATION }, { session })) {
                 throw new AppException(otpError, HttpStatus.BAD_REQUEST);
             }
     
             const hashedPassword = await this.bcryptService.hashAsync(password);
-            const { password: _, ...restUser } = (await this.userService.create([{ ...dto, password: hashedPassword }], { session }))[0].toObject();
+            const { password: _, presence, __v, ...restUser } = (await this.userService.create([{ ...data, password: hashedPassword }], { session }))[0].toObject();
             const s = await this.sessionService.create({ userId: restUser._id, userAgent, userIP });
             
-            await session.commitTransaction();
+            await BaseService.commitWithRetry(session);
 
-            return { user: restUser, ...this.signAuthTokens({ sessionId: s._id.toString(), userId: restUser._id.toString() }) };
+            return {
+                user: { ...restUser, counts: { archived_chats: 0, active_sessions: 0 } },
+                ...this.signAuthTokens({ sessionId: s._id.toString(), userId: restUser._id.toString() }),
+            };
         } catch (error) {
-            await session.abortTransaction();
+            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
+                await session.abortTransaction();
+                
+                return this.signup(dto);
+            } else {
+                !session.transaction.isCommitted && await session.abortTransaction();
 
-            throw error;
+                throw error;
+            }
         } finally {
-            await session.endSession();
+            session.endSession();
         }
     };
 
@@ -200,8 +223,16 @@ export class AuthService {
     }
 
     profile = async (user: UserDocument) => {
-        const { password, ...rest } = user.toObject();
+        const { password, presence, __v, ...rest } = user.toObject();
 
-        return { ...rest };
-    };
+        const { 0: archived_chats, 1: active_sessions } = (await Promise.allSettled([
+            this.feedService.getArchivedChatsSize(user._id), 
+            this.sessionService.getSessionsSize(user._id)
+        ])).map((v) => v.status === 'fulfilled' ? v.value : 0);
+
+        return {
+            ...rest,
+            counts: { archived_chats, active_sessions }
+        };
+    }
 }

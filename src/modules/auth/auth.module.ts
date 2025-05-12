@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
@@ -7,6 +7,7 @@ import { BcryptModule } from 'src/utils/services/bcrypt/bcrypt.module';
 import { UserModule } from '../user/user.module';
 import { OtpModule } from '../otp/otp.module';
 import { SessionModule } from '../session/session.module';
+import { FeedModule } from '../feed/feed.module';
 
 @Module({
     imports: [
@@ -27,6 +28,7 @@ import { SessionModule } from '../session/session.module';
                 };
             },
         }),
+        forwardRef(() => FeedModule)
     ],
     controllers: [AuthController],
     providers: [AuthService],

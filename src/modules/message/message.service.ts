@@ -353,7 +353,10 @@ export class MessageService extends BaseService<MessageDocument, Message> {
         try {
             session.startTransaction();
 
-            const messages = await this.find({ filter: { _id: { $in: messageIds }, sender: initiatorId }, options: { session } });
+            const messages = await this.find({ 
+                filter: { _id: { $in: messageIds }, sender: initiatorId }, 
+                options: { session, projection: { _id: 1 } } 
+            });
 
             if (!messages.length) throw new AppException({ message: 'Messages not found' }, HttpStatus.NOT_FOUND);
 
@@ -397,7 +400,14 @@ export class MessageService extends BaseService<MessageDocument, Message> {
 
             await this.deleteMany({ _id: { $in: findedMessageIds }, sender: initiatorId }, { session });
 
-            const unreadMessages = await this.countDocuments({ source: conversation._id, sender: initiatorId, read_by: { $nin: recipientId } });
+            const unreadMessages = await this.countDocuments(
+                {
+                    source: conversation._id,
+                    sender: initiatorId,
+                    read_by: { $nin: recipientId },
+                },
+                { session },
+            );
 
             isLastMessage && (await conversation.updateOne({ lastMessage, lastMessageSentAt }, { session }));
 

@@ -11,6 +11,9 @@ export class User {
     @Prop({ type: String, required: true })
     name: string;
 
+    @Prop({ type: String })
+    lastName?: string;
+
     @Prop({ type: String, required: true, unique: true })
     email: string;
 
@@ -39,7 +42,7 @@ export class User {
     isDeleted?: boolean;
 
     @Prop({ type: String })
-    status?: string;
+    bio?: string;
 
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'File' })
     avatar?: mongoose.Types.ObjectId;

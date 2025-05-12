@@ -1,11 +1,9 @@
-import { S3Client } from '@aws-sdk/client-s3';
 import { HttpStatus, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
 import { Connection, Model, Types } from 'mongoose';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BaseService } from 'src/utils/services/base/base.service';
-import { Providers } from 'src/utils/types';
 import { FeedService } from '../feed/feed.service';
 import { MessageService } from '../message/message.service';
 import { BlockList } from '../user/schemas/user.blocklist.schema';
@@ -20,7 +18,6 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
     constructor(
         @InjectConnection() private readonly connection: Connection,
         @InjectModel(Conversation.name) private readonly conversationModel: Model<ConversationDocument>,
-        @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
         @Inject(forwardRef(() => MessageService)) private readonly messageService: MessageService,
         @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
         private readonly feedService: FeedService,
