@@ -24,10 +24,7 @@ export class User {
     birthDate: Date;
 
     @Prop({ type: String, enum: ROLES, required: true, default: ROLES.USER })
-    role?: ROLES
-
-    @Prop({ type: Boolean, required: true, default: false })
-    isPrivate?: boolean;
+    role?: ROLES;
 
     @Prop({ type: String, enum: PRESENCE, required: true, default: PRESENCE.OFFLINE })
     presence?: PRESENCE;
@@ -46,6 +43,9 @@ export class User {
 
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'File' })
     avatar?: mongoose.Types.ObjectId;
+
+    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, ref: 'user_settings' })
+    settings: mongoose.Types.ObjectId;
 
     @Prop({ type: Date })
     createdAt?: Date;
