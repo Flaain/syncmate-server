@@ -1,27 +1,34 @@
+import { z } from 'zod';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { defaultSuccessResponse, recipientProjection } from 'src/utils/constants';
+import { defaultSuccessResponse } from 'src/utils/constants';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { getSearchPipeline } from 'src/utils/helpers/getSearchPipeline';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { Providers } from 'src/utils/types';
-import { z } from 'zod';
 import { FileService } from '../file/file.service';
-import { checkErrors } from './constants';
 import { BlockList } from './schemas/user.blocklist.schema';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { User } from './schemas/user.schema';
 import { UserDocument, UserSearchParams } from './types';
 import { UserEditDTO } from './dtos/user.edit.dto';
+import { UserSettings } from './schemas/user.settings.schema';
+import { UserPrivacySettings } from './schemas/user.privacy.schema';
+import { getPrivacySettingsPipeline } from './utils/getPrivacySettingsPipeline';
+import { UserPrivacySettingsModeDTO } from './dtos/user.settings.privacy.mode.dto';
+import { getRecipientPipeline } from './utils/getRecipientPipeline';
+import { getInitiatorAsRecipientFieldFactory } from './utils/getInitiatorAsRecipientFieldFactory';
 
 @Injectable()
 export class UserService extends BaseService<UserDocument, User> {
     constructor(
         @InjectConnection() private readonly connection: Connection,
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+        @InjectModel(UserSettings.name) private readonly settingsModel: Model<UserSettings>,
+        @InjectModel(UserPrivacySettings.name) private readonly privacyModel: Model<UserPrivacySettings>,
         @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
         @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
         private readonly fileService: FileService
@@ -66,7 +73,6 @@ export class UserService extends BaseService<UserDocument, User> {
                     $match: {
                         _id: { $ne: initiatorId },
                         $or: [{ name: { $regex: query, $options: 'i' } }, { login: { $regex: query, $options: 'i' } }],
-                        isPrivate: false,
                         isDeleted: false,
                     },
                 },
@@ -81,12 +87,20 @@ export class UserService extends BaseService<UserDocument, User> {
     check = async (dto: z.infer<typeof userCheckSchema>) => {
         const parsedQuery = userCheckSchema.parse(dto);
 
-        const user = await this.exists({
-            [parsedQuery.type]: { $regex: parsedQuery[parsedQuery.type], $options: 'i' },
-            isDeleted: false,
-        });
-
-        if (user) throw new AppException(checkErrors[parsedQuery.type], HttpStatus.CONFLICT);
+        if (
+            await this.exists({
+                [parsedQuery.type]: { $regex: parsedQuery[parsedQuery.type], $options: 'i' },
+                isDeleted: false,
+            })
+        ) {
+            throw new AppException(
+                {
+                    message: 'An account with these details already exists.',
+                    errors: [{ message: `${parsedQuery.type} already exists`, path: parsedQuery.type }],
+                },
+                HttpStatus.CONFLICT,
+            );
+        }
 
         return defaultSuccessResponse;
     };
@@ -130,7 +144,12 @@ export class UserService extends BaseService<UserDocument, User> {
         session.startTransaction();
 
         try {
-            const newFile = (await this.fileService.create([{ key, url, mimetype: file.mimetype, size: file.size }], { session }))[0];
+            const newFile = (
+                await this.fileService.create(
+                    [{ key, originalName: file.originalname, url, mimetype: file.mimetype, size: file.size }],
+                    { session },
+                )
+            )[0];
 
             initiator.avatar && await this.fileService.deleteMany({ _id: initiator.avatar }); // we store old avatar in storage but delete it from db just in case if we want keep old avatar we should keep it in db
             
@@ -163,32 +182,82 @@ export class UserService extends BaseService<UserDocument, User> {
         isOfficial: user.isOfficial,
     })
 
-    getRecipient = async (recipientId: string | Types.ObjectId, session?: ClientSession) => {
-        const recipient = (
-            await this.aggregate(
-                [
-                    {
-                        $match: {
-                            _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId,
-                        },
-                    },
-                    {
-                        $lookup: {
-                            from: 'files',
-                            localField: 'avatar',
-                            foreignField: '_id',
-                            as: 'avatar',
-                            pipeline: [{ $project: { url: 1 } }],
-                        },
-                    },
-                    { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-                    { $project: recipientProjection },
-                ],
-            )
-        )[0];
+    getRecipient = async (recipientId: string | Types.ObjectId, initiatorId: Types.ObjectId, session?: ClientSession) => {
+        const recipient = (await this.aggregate(getRecipientPipeline(recipientId, initiatorId), { session }))[0];
 
         if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
 
         return recipient;
+    }
+
+    getInitiatorAsRecipient = async (initiator: UserDocument, recipientId: Types.ObjectId, session?: ClientSession) => {
+        // TODO: temp solution, find a better way
+        const initiatorAsRecipient = (await this.settingsModel.aggregate([
+            { $match: { _id: initiator.settings._id } },
+            { $lookup: { from: 'privacy_settings', localField: 'privacy_settings', foreignField: '_id', as: 'privacy_settings' } },
+            { $unwind: { path: '$privacy_settings', preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    ...getInitiatorAsRecipientFieldFactory('lastSeenAt', recipientId, 'whoCanSeeMyLastSeenTime'),
+                    ...getInitiatorAsRecipientFieldFactory('presence', recipientId, 'whoCanSeeMyLastSeenTime'),
+                    ...getInitiatorAsRecipientFieldFactory('avatar', recipientId, 'whoCanSeeMyProfilePhotos'),
+                },
+            },
+        ], { session }))[0];
+
+        return {
+            _id: initiator._id,
+            avatar: initiatorAsRecipient.avatar ? initiatorAsRecipient.avatar.url : undefined,
+            name: initiator.name,
+            login: initiator.login,
+            presence: initiatorAsRecipient.presence ? initiator.presence : undefined,
+            lastSeenAt: initiatorAsRecipient.lastSeenAt ? initiatorAsRecipient.lastSeenAt : undefined,
+            isOfficial: initiator.isOfficial,
+        }
+    }
+
+    createUser = async (body: any, options?: any) => { // TODO: fix type
+        const privacy_settings = await this.privacyModel.create({});
+        const settings_doc = await this.settingsModel.create({ privacy_settings: privacy_settings._id });
+        
+        const {
+            password,
+            settings,
+            presence,
+            __v,
+            ...restUser
+        } = (
+            await this.create([{ ...body, login: body.login.toLowerCase(), settings: settings_doc._id }], {
+                session: options?.session,
+            })
+        )[0].toObject();
+
+        return restUser;
+    }
+
+    getPrivacySettings = async (initiator: UserDocument) => {
+        const settings = (await this.settingsModel.aggregate(getPrivacySettingsPipeline(initiator.settings._id)))[0];
+
+        if (!settings) throw new AppException({ message: 'Settings not found' }, HttpStatus.NOT_FOUND);
+
+        return settings;
+    };
+
+    updatePrivacySettingMode = async ({ initiator, dto: { setting, mode } }: { initiator: UserDocument; dto: UserPrivacySettingsModeDTO }) => {
+        const settings = await this.settingsModel.findById(initiator.settings._id);
+
+        if (!settings) throw new AppException({ message: 'Settings not found' }, HttpStatus.NOT_FOUND);
+
+        await this.privacyModel.findOneAndUpdate(
+            { _id: settings.privacy_settings._id },
+            {
+                $set: {
+                    [`${setting}.mode`]: mode,
+                    [`${setting}.${mode ? 'allow' : 'deny'}`]: [], // clear exceptions. If new mode 1 - clear allow, else - clear deny
+                },
+            },
+        );
+
+        return defaultSuccessResponse;
     }
 }
