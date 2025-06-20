@@ -1,8 +1,5 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-
-const configModule = ConfigModule.forRoot({ isGlobal: true, expandVariables: true, cache: true });
-
 import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -11,17 +8,19 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
 import { FeedModule } from './modules/feed/feed.module';
 import { FileModule } from './modules/file/file.module';
-import { GatewayModule } from './modules/gateway/gateway.module';
 import { MessageModule } from './modules/message/message.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { SessionModule } from './modules/session/session.module';
 import { UserModule } from './modules/user/user.module';
 import { BucketModule } from './utils/services/bucket/bucket.module';
 import { UAParserModule } from './utils/services/uaparser/uaparser.module';
+import { cookieParser } from './utils/middlewares/cookieParser';
+import { RequestMiddleware } from './utils/middlewares/request.middleware';
+import { GatewayModule } from './modules/gateway/gateway.module';
 
 @Module({
     imports: [
-        configModule,
+        ConfigModule.forRoot({ isGlobal: true, expandVariables: true, cache: true }),
         AuthModule,
         SessionModule,
         UserModule,
@@ -46,4 +45,8 @@ import { UAParserModule } from './utils/services/uaparser/uaparser.module';
     ],
     providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+    configure(consumer: MiddlewareConsumer) {
+        consumer.apply(cookieParser, RequestMiddleware).forRoutes('*');
+    }
+}
