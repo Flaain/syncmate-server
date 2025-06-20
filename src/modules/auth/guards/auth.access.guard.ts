@@ -23,10 +23,8 @@ export class AccessGuard extends BaseAuthGuard implements CanActivate {
 
         const { userId, sessionId } = this.authService.verifyToken<{ userId: string; sessionId: string }>(this.extractTokenFromCookies(request, 'access'), 'access');
 
-        const { 0: session, 1: user } = await Promise.all([
-            this.sessionService.validate(sessionId),
-            this.authService.validate(userId),
-        ]);
+        const session = await this.sessionService.validate(sessionId);
+        const user = await this.authService.validate(userId);
 
         request['doc'] = { user, session };
 

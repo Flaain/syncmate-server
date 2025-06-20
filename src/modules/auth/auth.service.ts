@@ -227,7 +227,7 @@ export class AuthService {
     };
 
     logout = async ({ user, sessionId }: { user: UserDocument; sessionId: Types.ObjectId }) => {
-        if (!(await this.sessionService.findOneAndDelete({ filter: { _id: sessionId, userId: user._id } }))) throw new AppException({ message: 'Cannot find session' }, HttpStatus.UNAUTHORIZED);
+        if (!(await this.sessionService.findOneAndDelete({ _id: sessionId, userId: user._id } ))) throw new AppException({ message: 'Cannot find session' }, HttpStatus.BAD_REQUEST);
 
         return defaultSuccessResponse;
     };
