@@ -1,22 +1,13 @@
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { Response } from 'express';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import { AllExceptionFilter } from './utils/filters/all.expection.filter';
-import { cookieParser } from './utils/middlewares/cookieParser';
 import { CookiesService } from './utils/services/cookies/cookies.service';
+import { GatewayAdapter } from './modules/gateway/gateway.adapter';
 
 (async () => {
     try {
-        process.on('uncaughtException', (err) => {
-            console.error('🔥 Uncaught Exception:', err);
-        });
-        
-        process.on('unhandledRejection', (reason) => {
-            console.error('🔥 Unhandled Rejection:', reason);
-        });
-
         const PORT = process.env.PORT ?? 3000;
 
         const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -26,13 +17,35 @@ import { CookiesService } from './utils/services/cookies/cookies.service';
             },
         });
 
-        app.use(cookieParser);
-
         app.useGlobalPipes(new ZodValidationPipe());
         app.useGlobalFilters(new AllExceptionFilter(app.get(HttpAdapterHost), app.get(CookiesService)));
+        app.useWebSocketAdapter(new GatewayAdapter(app));
+        
+        app.enableShutdownHooks();
 
-        app.use('/health', (_, res: Response) => {
-            res.json({ status: true });
+        const gracefulShutdown = async (signal: string) => {
+            try {
+                console.log(`🛑 Received ${signal}, starting graceful shutdown...`);
+                await app.close();
+                console.log('✅ Application closed gracefully');
+                process.exit(0);
+            } catch (error) {
+                console.error('❌ Error during graceful shutdown', error);
+                process.exit(1);
+            }
+        };
+
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+        process.on('uncaughtException', (err) => {
+            console.error('💥 Uncaught Exception', err);
+            process.exit(1);
+        });
+
+        process.on('unhandledRejection', (reason, promise) => {
+            console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+            process.exit(1);
         });
 
         await app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
