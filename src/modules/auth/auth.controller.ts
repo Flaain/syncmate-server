@@ -7,23 +7,20 @@ import { RequestWithSession, RequestWithUser, Routes } from 'src/utils/types';
 import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
 import { CookiesService } from 'src/utils/services/cookies/cookies.service';
 import { AuthChangePasswordType } from './types';
-import { ForgotDTO } from './dtos/auth.forgot.dto';
 import { AuthResetDTO } from './dtos/auth.reset.dto';
 import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
-import { OtpService } from '../otp/otp.service';
-import { OtpType } from '../otp/types';
 import { defaultSuccessResponse } from 'src/utils/constants';
-import { Auth } from './decorators/auth.decorator';
 import { Refresh } from './decorators/refresh.decorator';
+import { Public } from 'src/utils/decorators/public.decorator';
 
 @Controller(Routes.AUTH)
 export class AuthController {
     constructor(
         private readonly authService: AuthService,
         private readonly cookiesService: CookiesService,
-        private readonly otpService: OtpService,
     ) {}
 
+    @Public()
     @Post('signup')
     async signup(@Body() dto: Required<SignupDTO>, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
         const { user, accessToken, refreshToken } = await this.authService.signup({ 
@@ -37,6 +34,7 @@ export class AuthController {
         return user;
     }
 
+    @Public()
     @Post('signin')
     async signin(@Body() dto: SigninDTO, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
         const { user, accessToken, refreshToken } = await this.authService.signin({
@@ -50,6 +48,7 @@ export class AuthController {
         return user;
     }
 
+    @Public()
     @Refresh()
     @Get('refresh')
     async refresh(@Req() req: RequestWithSession, @Res({ passthrough: true }) res: Response) {
@@ -60,34 +59,25 @@ export class AuthController {
        return defaultSuccessResponse;
     }
 
-    @Auth()
-    @Post('password')
+    @Post('change-password')
     password(@Req() req: RequestWithUser, @Body() dto: Omit<z.infer<typeof authChangePasswordSchema>, 'type'>, @Query('type') type: AuthChangePasswordType) {
         return this.authService.changePassword({ initiator: req.doc.user, type, ...dto });
     }
 
-    @Post('password/forgot')
-    forgot(@Body() dto: ForgotDTO) {
-        return this.otpService.createOtp({ email: dto.email, type: OtpType.PASSWORD_RESET });
-    }
-
+    @Public()
     @Post('reset')
     reset(@Body() dto: AuthResetDTO) {
         return this.authService.reset(dto);
     }
 
 
-    @Auth()
     @Get('logout')
     async logout(@Req() req: RequestWithUser, @Res({ passthrough: true }) res: Response) {
         this.cookiesService.removeAuthCookies(res);
 
-        const status = await this.authService.logout({ user: req.doc.user, sessionId: req.doc.sessionId });
-
-        return status;
+        return this.authService.logout({ user: req.doc.user, sessionId: req.doc.session._id });
     }
 
-    @Auth()
     @Get('me')
     profile(@Req() req: RequestWithUser) {
         return this.authService.profile(req.doc.user);
