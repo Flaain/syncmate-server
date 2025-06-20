@@ -9,13 +9,15 @@ export const MESSAGES_BATCH = 25;
 export const recipientProjection = {
     _id: 1,
     name: 1,
+    email: 1,
     login: 1,
     avatar: 1,
     isOfficial: 1,
-    isPrivate: 1,
-    presence: 1,
+    // presence: 1,
     lastSeenAt: 1,
 };
+
+export const AN_ERROR_OCCURRED = 'An error occurred during the request. Please try again.';
 
 export const paramPipe: PipeTransform = { transform: validateParamId };
 export const defaultSuccessResponse = { message: 'OK' };

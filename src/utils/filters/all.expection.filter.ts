@@ -70,8 +70,6 @@ export class AllExceptionFilter implements ExceptionFilter {
     }
 
     catch(exception: unknown, host: ArgumentsHost) {
-        const { httpAdapter } = this.httpAdapterHost;
-        
         console.log(exception);
 
         const ctx = host.switchToHttp();
@@ -81,7 +79,7 @@ export class AllExceptionFilter implements ExceptionFilter {
 
         const handlerReturn = this.exceptionHandlers[exception.constructor.name]?.(exception, request, response);
 
-        return httpAdapter.reply(response, {
+        return this.httpAdapterHost.httpAdapter.reply(response, {
             url: request.url,
             timestamp: new Date().toISOString(),
             message: 'Internal server error',

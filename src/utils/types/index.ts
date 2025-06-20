@@ -2,7 +2,7 @@ import { Document, FilterQuery, UpdateQuery as MongooseUpdateQuery, PipelineStag
 import { SessionDocument } from 'src/modules/session/types';
 import { UserDocument } from 'src/modules/user/types';
 
-export type RequestWithUser = Request & { doc: { user: UserDocument; sessionId: string } };
+export type RequestWithUser = Request & { doc: { user: UserDocument; session: SessionDocument } };
 export type RequestWithSession = Request & { doc: { session: SessionDocument } };
 export type SearchPipelineParams = IPagination & {
     initiatorId: Types.ObjectId;

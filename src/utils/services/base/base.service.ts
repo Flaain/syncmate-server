@@ -19,12 +19,12 @@ import { FindQuery, UpdateQuery } from 'src/utils/types';
 export class BaseService<Doc extends Document, Entity> {
     constructor(private readonly model: Model<Doc>) {}
 
-    static commitWithRetry = async (session: ClientSession) => {
+    static commitWithRetry = async (session: ClientSession, retryCount = 3) => {
         try {
             await session.commitTransaction();
         } catch (error) {
-            if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.UnknownTransactionCommitResult)) {
-                await BaseService.commitWithRetry(session);
+            if (retryCount && error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.UnknownTransactionCommitResult)) {
+                await BaseService.commitWithRetry(session, retryCount - 1);
             } else {
                 throw error;
             }
