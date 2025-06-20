@@ -1,30 +1,35 @@
-import { CanActivate, ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
-import { AppException } from 'src/utils/exceptions/app.exception';
-import { AppExceptionCode, Cookies } from 'src/utils/types';
 import { AuthService } from '../auth.service';
+import { SessionService } from 'src/modules/session/session.service';
+import { Reflector } from '@nestjs/core';
+import { PUBLIC_KEY } from 'src/utils/decorators/public.decorator';
+import { BaseAuthGuard } from './auth.base.guard';
 
 @Injectable()
-export class AccessGuard implements CanActivate {
-    constructor(private readonly authService: AuthService) {}
+export class AccessGuard extends BaseAuthGuard implements CanActivate {
+    constructor(
+        private readonly authService: AuthService,
+        private readonly sessionService: SessionService,
+        private readonly reflector: Reflector
+    ) {
+        super();
+    }
 
     canActivate = async (context: ExecutionContext) => {
-        const request = context.switchToHttp().getRequest<Request>();
-        const token = this.extractTokenFromCookies(request);
-        const { userId, sessionId } = this.authService.verifyToken<{ userId: string, sessionId: string }>(token, 'access');
-        
-        const user = await this.authService.validate(userId);
-        
-        request['doc'] = { user, sessionId };
-        
-        return true;
-    };
-    
-    private extractTokenFromCookies = (req: Request): string => {
-        if (Cookies.ACCESS_TOKEN in req.cookies) {
-            return req.cookies[Cookies.ACCESS_TOKEN];
-        }
+        if (this.reflector.get<boolean>(PUBLIC_KEY, context.getHandler())) return true;
 
-        throw new AppException({ message: 'Unauthorized', errorCode: AppExceptionCode.MISSING_ACCESS_TOKEN }, HttpStatus.UNAUTHORIZED);
+        const request = context.switchToHttp().getRequest<Request>();
+
+        const { userId, sessionId } = this.authService.verifyToken<{ userId: string; sessionId: string }>(this.extractTokenFromCookies(request, 'access'), 'access');
+
+        const { 0: session, 1: user } = await Promise.all([
+            this.sessionService.validate(sessionId),
+            this.authService.validate(userId),
+        ]);
+
+        request['doc'] = { user, session };
+
+        return true;
     };
 }
