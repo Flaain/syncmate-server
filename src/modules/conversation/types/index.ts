@@ -1,9 +1,16 @@
-import { HydratedDocument, Types } from 'mongoose';
+import { ClientSession, HydratedDocument, Types } from 'mongoose';
 import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
 import { Message } from 'src/modules/message/schemas/message.schema';
 import { User } from 'src/modules/user/schemas/user.schema';
 import { UserDocument } from 'src/modules/user/types';
 import { Conversation } from '../schemas/conversation.schema';
+import { ConversationSettings } from '../schemas/conversation.settings.schema';
+import { MessageSendDTO } from '../dtos/message.send.dto';
+
+export type ConversationDocument = HydratedDocument<Conversation>;
+export type ConversationSettingsDocument = HydratedDocument<ConversationSettings>;
+export type SendMessageParams = MessageSendDTO & { recipientId: string; initiator: UserDocument };
+export type EditMessageParams = { message: string; initiator: UserDocument; messageId: string };
 
 export enum CONVERSATION_EVENTS {
     JOIN = 'conversation.join',
@@ -38,7 +45,7 @@ export interface ConversationDeleteMessageParams {
 }
 
 export interface ConversationSendMessageParams {
-    initiator: UserDocument;
+    initiatorAsRecipient: any;
     feedItem: FeedWrapper<ConversationFeed>;
     session_id: string;
     unread_initiator: number;
@@ -84,8 +91,6 @@ export interface IConversation {
     messages?: Array<Types.ObjectId>;
 }
 
-export type ConversationDocument = HydratedDocument<Conversation>;
-
 export interface GetConversationReturn {
     conversation: {
         _id?: Types.ObjectId;
@@ -99,4 +104,13 @@ export interface CreateConversationReturn {
     _id: Types.ObjectId;
     lastMessageSentAt: Date;
     recipient: Omit<User, 'password' | 'birthDate'>;
+}
+
+export interface HandleFeedParams {
+    conversationId: Types.ObjectId;
+    initiatorId: Types.ObjectId;
+    recipientId: Types.ObjectId;
+    lastActionAt: Date;
+    session: ClientSession;
+    isNewConversation: boolean;
 }

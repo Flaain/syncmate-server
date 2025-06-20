@@ -15,6 +15,9 @@ export class Conversation {
     @Prop({ type: Date, required: true, default: () => new Date() })
     lastMessageSentAt?: Date;
 
+    @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'conversation_settings' }] })
+    settings?: Array<mongoose.Types.ObjectId>;
+
     @Prop({ type: Date })
     createdAt?: Date;
 

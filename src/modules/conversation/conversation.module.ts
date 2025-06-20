@@ -1,6 +1,5 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AuthModule } from '../auth/auth.module';
 import { FeedModule } from '../feed/feed.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { MessageModule } from '../message/message.module';
@@ -10,18 +9,19 @@ import { ConversationController } from './conversation.controller';
 import { ConversationGateway } from './conversation.gateway';
 import { ConversationService } from './conversation.service';
 import { Conversation, ConversationSchema } from './schemas/conversation.schema';
+import { ConversationSettings, ConversationSettingsSchema } from './schemas/conversation.settings.schema';
 
 @Module({
     imports: [
         UserModule,
         FeedModule,
+        MessageModule,
+        GatewayModule,
         MongooseModule.forFeature([
             { name: Conversation.name, schema: ConversationSchema },
+            { name: ConversationSettings.name, schema: ConversationSettingsSchema },
             { name: BlockList.name, schema: BlockListSchema },
         ]),
-        forwardRef(() => GatewayModule),
-        forwardRef(() => AuthModule),
-        forwardRef(() => MessageModule),
     ],
     providers: [ConversationService, ConversationGateway],
     controllers: [ConversationController],
