@@ -1,6 +1,4 @@
-import { ClientSession, HydratedDocument, Types } from 'mongoose';
-import { UserDocument } from 'src/modules/user/types';
-import { MessageSendDTO } from '../dtos/message.send.dto';
+import { HydratedDocument, Types } from 'mongoose';
 import { Message } from '../schemas/message.schema';
 
 export enum MessageSourceRefPath {
@@ -21,16 +19,4 @@ export interface IMessage {
     updatedAt?: Date;
 }
 
-export interface HandleFeedParams {
-    conversationId: Types.ObjectId;
-    initiatorId: Types.ObjectId;
-    recipientId: Types.ObjectId;
-    lastActionAt: Date;
-    session: ClientSession;
-    isNewConversation: boolean;
-}
-
 export type MessageDocument = HydratedDocument<Message>;
-
-export type SendMessageParams = MessageSendDTO & { recipientId: string; initiator: UserDocument };
-export type EditMessageParams = { message: string; initiator: UserDocument; messageId: string };
