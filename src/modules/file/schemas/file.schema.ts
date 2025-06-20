@@ -6,6 +6,9 @@ export class File {
     key: string;
 
     @Prop({ type: String, required: true })
+    originalName: string;
+
+    @Prop({ type: String, required: true })
     mimetype: string;
 
     @Prop({ type: Number, required: true })
