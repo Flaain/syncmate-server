@@ -1,10 +1,8 @@
 import { Controller, Get, Query, Req } from '@nestjs/common';
 import { Pagination } from 'src/utils/decorators/pagination.decorator.';
 import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
-import { Auth } from '../auth/decorators/auth.decorator';
 import { FeedService } from './feed.service';
 
-@Auth()
 @Controller(Routes.FEED)
 export class FeedController {
     constructor(private readonly feedService: FeedService) {}

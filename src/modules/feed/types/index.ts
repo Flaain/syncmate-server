@@ -45,7 +45,7 @@ export interface GetFeedParams {
 
 export interface GetFeedPipelineParams {
     ids: Array<Types.ObjectId>;
-    initiatorId: string | Types.ObjectId;
+    initiatorId: Types.ObjectId;
     cursor?: string;
     limit?: number;
 }

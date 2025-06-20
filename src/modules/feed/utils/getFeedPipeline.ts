@@ -1,7 +1,7 @@
 import { PipelineStage } from 'mongoose';
-import { recipientProjection } from 'src/utils/constants';
 import { SearchPipelineParams } from 'src/utils/types';
 import { GetFeedPipelineParams } from '../types';
+import { getRecipientFieldFactory } from 'src/modules/user/utils/getRecipientFieldFactory';
 
 export const getFeedSearchPipeline = ({ initiatorId, query }: Pick<SearchPipelineParams, 'initiatorId' | 'query'>): Array<PipelineStage.FacetPipelineStage> => [
     {
@@ -71,8 +71,37 @@ export const getFeedPipeline = ({ initiatorId, ids, cursor, limit = 10 }: GetFee
                                     pipeline: [{ $project: { _id: 1, url: 1 } }],
                                 },
                             },
+                            {
+                                $lookup: {
+                                    from: 'user_settings',
+                                    localField: 'settings',
+                                    foreignField: '_id',
+                                    as: 'settings',
+                                    pipeline: [
+                                        {
+                                            $lookup: {
+                                                from: 'privacy_settings',
+                                                localField: 'privacy_settings',
+                                                foreignField: '_id',
+                                                as: 'privacy_settings',
+                                            },
+                                        },
+                                        { $unwind: { path: '$privacy_settings', preserveNullAndEmptyArrays: true } },
+                                    ],
+                                },
+                            },
+                            { $unwind: { path: '$settings', preserveNullAndEmptyArrays: true } },
                             { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-                            { $project: recipientProjection },
+                            {
+                                $project: {
+                                    name: 1,
+                                    login: 1,
+                                    isOfficial: 1,
+                                    ...getRecipientFieldFactory('lastSeenAt', initiatorId, 'whoCanSeeMyLastSeenTime'),
+                                    ...getRecipientFieldFactory('presence', initiatorId, 'whoCanSeeMyLastSeenTime'),
+                                    ...getRecipientFieldFactory('avatar', initiatorId, 'whoCanSeeMyProfilePhotos'),
+                                },
+                            },
                         ],
                         as: 'participants',
                     },
@@ -125,11 +154,11 @@ export const getFeedPipeline = ({ initiatorId, ids, cursor, limit = 10 }: GetFee
     {
         $set: {
             item: {
-                $mergeObjects: [{ $first: '$conversation' }, { $first: '$_temporaryCloud' }],
+                $mergeObjects: [{ $first: '$conversation' }],
             },
         },
     },
-    { $unset: ['conversation', '_temporaryCloud'] },
+    { $unset: ['conversation'] },
     { $unwind: { path: '$config', preserveNullAndEmptyArrays: true } },
     { $project: { _id: 1, type: 1, lastActionAt: 1, item: 1, config_id: '$config._id' } },
 ];
