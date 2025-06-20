@@ -13,6 +13,6 @@ export interface ISession {
 
 export interface DropSessionParams {
     initiatorUserId: Types.ObjectId | string;
-    initiatorSessionId: string;
+    initiatorSessionId: Types.ObjectId;
     sessionId: string;
 }
