@@ -1,9 +1,6 @@
-import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
-import { AllExceptionFilter } from './utils/filters/all.expection.filter';
-import { CookiesService } from './utils/services/cookies/cookies.service';
 import { GatewayAdapter } from './modules/gateway/gateway.adapter';
 
 (async () => {
@@ -17,8 +14,6 @@ import { GatewayAdapter } from './modules/gateway/gateway.adapter';
             },
         });
 
-        app.useGlobalPipes(new ZodValidationPipe());
-        app.useGlobalFilters(new AllExceptionFilter(app.get(HttpAdapterHost), app.get(CookiesService)));
         app.useWebSocketAdapter(new GatewayAdapter(app));
         
         app.enableShutdownHooks();
