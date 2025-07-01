@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -17,6 +17,7 @@ import { UAParserModule } from './utils/services/uaparser/uaparser.module';
 import { cookieParser } from './utils/middlewares/cookieParser';
 import { RequestMiddleware } from './utils/middlewares/request.middleware';
 import { GatewayModule } from './modules/gateway/gateway.module';
+import { GlobalExceptionFilter } from './utils/filters/global.exception.filter';
 
 @Module({
     imports: [
@@ -34,7 +35,7 @@ import { GatewayModule } from './modules/gateway/gateway.module';
                 secretAccessKey: process.env.BUCKET_SECRET,
             },
         }),
-        MongooseModule.forRoot(process.env.DATABASE_URI, { retryWrites: true }),
+        MongooseModule.forRoot(process.env.DATABASE_URI),
         ThrottlerModule.forRoot([{ limit: 10, ttl: 60000 }]),
         EventEmitterModule.forRoot({ global: true }),
         ConversationModule,
@@ -43,7 +44,10 @@ import { GatewayModule } from './modules/gateway/gateway.module';
         OtpModule,
         GatewayModule,
     ],
-    providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+    providers: [
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+        { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+    ],
 })
 export class AppModule implements NestModule {
     configure(consumer: MiddlewareConsumer) {
