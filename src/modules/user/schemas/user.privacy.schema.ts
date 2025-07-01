@@ -1,6 +1,9 @@
 import mongoose from 'mongoose';
 import { Prop, PropOptions, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PrivacySetting } from '../types';
+import { getSchemaArrayLimit } from 'src/utils/helpers/arrayLimit';
+
+const privacySettingExceptionValidator = [getSchemaArrayLimit(100), 'Privacy exception (`{PATH}`) cannot contain more than 100 users'];
 
 const getPrivacySettingOptions = (): PropOptions => ({
     type: {
@@ -14,11 +17,13 @@ const getPrivacySettingOptions = (): PropOptions => ({
         deny: {
             type: [mongoose.Schema.Types.ObjectId],
             ref: 'User',
+            validate: privacySettingExceptionValidator,
             default: [],
         },
         allow: {
             type: [mongoose.Schema.Types.ObjectId],
             ref: 'User',
+            validate: privacySettingExceptionValidator,
             default: [],
         },
     },

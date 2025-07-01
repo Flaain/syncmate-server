@@ -25,7 +25,7 @@ export const getInitiatorAsRecipientFieldFactory = (
                 ],
             },
             then: true,
-            else: false,
+            else: '$$REMOVE',
         },
     },
 });

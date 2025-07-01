@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { paramPipe } from 'src/utils/constants';
@@ -6,11 +6,12 @@ import { Pagination } from 'src/utils/decorators/pagination.decorator.';
 import { IPagination, RequestWithUser, Routes } from 'src/utils/types';
 import { CONVERSATION_EVENTS } from '../conversation/types';
 import { filePipe } from './constants';
-import { CheckType } from './types';
+import { CheckType, UserEditDTO, UserPrivacySettingModeDTO } from './types';
 import { UserService } from './user.service';
-import { UserEditDTO } from './dtos/user.edit.dto';
 import { Public } from 'src/utils/decorators/public.decorator';
-import { UserPrivacySettingsModeDTO } from './dtos/user.settings.privacy.mode.dto';
+import { DTO } from 'src/utils/decorators/dto.decorator';
+import { userEditSchema } from './schemas/user.edit.schema';
+import { userPrivacySettingModeSchema } from './schemas/user.settings.privacy.mode.schema';
 
 @Controller(Routes.USER)
 export class UserController {
@@ -27,7 +28,7 @@ export class UserController {
 
     @Public()
     @Get('check')
-    check(@Query('type') type: CheckType, @Query('email') email: string, @Query('login') login: string) {
+    check(@Query('type') type: CheckType, @Query('email') email: string | undefined, @Query('login') login: string | undefined) {
         return this.userService.check({ type, email, login });
     }
     
@@ -56,8 +57,8 @@ export class UserController {
     }
 
     @Patch('edit')
-    edit(@Req() { doc: { user } }: RequestWithUser, @Body() dto: UserEditDTO) {
-        return this.userService.edit(dto, user)
+    edit(@Req() { doc: { user } }: RequestWithUser, @DTO(userEditSchema) dto: UserEditDTO) {
+        return this.userService.edit(dto, user);
     }
 
     @Get('settings/privacy')
@@ -66,7 +67,7 @@ export class UserController {
     }
     
     @Patch('settings/privacy/mode')
-    updatePrivacySettingMode(@Req() req: RequestWithUser, @Body() dto: UserPrivacySettingsModeDTO) {
+    updatePrivacySettingMode(@Req() req: RequestWithUser, @DTO(userPrivacySettingModeSchema) dto: UserPrivacySettingModeDTO) {
         return this.userService.updatePrivacySettingMode({ initiator: req.doc.user, dto });
     }
 }

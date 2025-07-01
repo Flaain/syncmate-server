@@ -1,16 +1,12 @@
 import { PipelineStage, Types } from 'mongoose';
-import { recipientProjection } from 'src/utils/constants';
 import { getRecipientFieldFactory } from './getRecipientFieldFactory';
 
 export const getRecipientPipeline = (
     recipientId: string | Types.ObjectId,
     initiatorId: Types.ObjectId,
+    feed: boolean
 ): Array<PipelineStage> => [
-    {
-        $match: {
-            _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId,
-        },
-    },
+    { $match: {  _id: typeof recipientId === 'string' ? new Types.ObjectId(recipientId) : recipientId } },
     {
         $lookup: {
             from: 'files',
@@ -43,10 +39,13 @@ export const getRecipientPipeline = (
     { $unwind: { path: '$settings', preserveNullAndEmptyArrays: true } },
     {
         $project: {
-            ...recipientProjection,
-            ...getRecipientFieldFactory('email', initiatorId, 'whoCanSeeMyEmail'),
-            ...getRecipientFieldFactory('bio', initiatorId, 'whoCanSeeMyBio'),
-            ...getRecipientFieldFactory('lastSeenAt', initiatorId, 'whoCanSeeMyLastSeenTime'),
+            name: 1,
+            login: 1,
+            ...(!feed && {
+                ...getRecipientFieldFactory('email', initiatorId, 'whoCanSeeMyEmail'),
+                ...getRecipientFieldFactory('bio', initiatorId, 'whoCanSeeMyBio'),
+                ...getRecipientFieldFactory('lastSeenAt', initiatorId, 'whoCanSeeMyLastSeenTime'),
+            }),
             ...getRecipientFieldFactory('presence', initiatorId, 'whoCanSeeMyLastSeenTime'),
             ...getRecipientFieldFactory('avatar', initiatorId, 'whoCanSeeMyProfilePhotos'),
             isMessagingRestricted: {
