@@ -64,7 +64,7 @@ export class ConversationGateway {
         }
     }
 
-    @OnEvent(USER_EVENTS.PRESENCE) // to call manually
+    @OnEvent(USER_EVENTS.PRESENCE)
     @SubscribeMessage(USER_EVENTS.PRESENCE)
     async changeUserStatus(@MessageBody() { presence, lastSeenAt }: ChangeUserStatusParams, @ConnectedSocket() client: SocketWithUser) {
         if (client.data.user.presence === presence) return;
@@ -73,7 +73,33 @@ export class ConversationGateway {
 
         const initiatorId = client.data.user._id;
 
-        const { 0: conversations } = await Promise.all([
+        const { 0: { 0: settings }, 1: conversations } = await Promise.all([
+            this.userService.settingsModel.aggregate([
+                { $match: { _id: client.data.user.settings._id } },
+                { $lookup: { from: 'privacy_settings', localField: 'privacy_settings', foreignField: '_id', as: 'privacy_settings' } },
+                { $unwind: { path: '$privacy_settings', preserveNullAndEmptyArrays: true } },
+                {
+                    $project: {
+                        whoCanSeeMyLastSeenTime: {
+                            mode: '$privacy_settings.whoCanSeeMyLastSeenTime.mode',
+                            deny: {
+                                $map: {
+                                    input: '$privacy_settings.whoCanSeeMyLastSeenTime.deny',
+                                    as: 'id',
+                                    in: { $toString: '$$id' },
+                                },
+                            },
+                            allow: {
+                                $map: {
+                                    input: '$privacy_settings.whoCanSeeMyLastSeenTime.allow',
+                                    as: 'id',
+                                    in: { $toString: '$$id' },
+                                },
+                            },
+                        },
+                    },
+                },
+            ]),
             this.conversationService.find({
                 filter: { participants: { $in: initiatorId } },
                 projection: { participants: 1 },
@@ -90,14 +116,19 @@ export class ConversationGateway {
             }),
             client.data.user.updateOne({ presence, lastSeenAt }),
         ]);
+        
+        const setting = settings?.whoCanSeeMyLastSeenTime;
 
         conversations.forEach((conversation) => {
             const recipientId = conversation.participants[0]._id.toString();
-            const recipientSockets = this.gatewayService._sockets.get(recipientId);
 
-            recipientSockets?.forEach((socket) => socket.emit(FEED_EVENTS.USER_PRESENCE, { recipientId: initiatorId.toString(), presence }));
+            if (setting && ((setting.mode === 1 && !setting.deny.includes(recipientId)) || (setting.mode === 0 && setting.allow.includes(recipientId)))) {
+                const recipientSockets = this.gatewayService._sockets.get(recipientId);
 
-            client.to(this.getRoomId([initiatorId.toString(), recipientId])).emit(CONVERSATION_EVENTS.USER_PRESENCE, { presence, lastSeenAt });
+                recipientSockets?.forEach((socket) => socket.emit(FEED_EVENTS.USER_PRESENCE, { recipientId: initiatorId.toString(), presence }));
+
+                client.to(this.getRoomId([initiatorId.toString(), recipientId])).emit(CONVERSATION_EVENTS.USER_PRESENCE, { presence, lastSeenAt });
+            }
         });
     }
 

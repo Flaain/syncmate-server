@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { MongoError, MongoErrorLabel } from 'mongodb';
-import { Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { FeedService } from '../feed/feed.service';
@@ -10,13 +10,13 @@ import { BlockList } from '../user/schemas/user.blocklist.schema';
 import { UserDocument } from '../user/types';
 import { UserService } from '../user/user.service';
 import { Conversation } from './schemas/conversation.schema';
-import { ConversationDocument, ConversationSettingsDocument, EditMessageParams, HandleFeedParams, SendMessageParams } from './types';
-import { getConversationPipeline, isBlockedPipeline } from './utils/pipelines';
+import { ConversationDocument, ConversationSettingsDocument, EditMessageParams, HandleFeedParams, MessageReplyDTO, SendMessageParams } from './types';
 import { ConversationSettings } from './schemas/conversation.settings.schema';
 import { FEED_TYPE } from '../feed/types';
 import { MessageSourceRefPath } from '../message/types';
-import { MessageReplyDTO } from './dtos/message.reply.dto';
 import { Message } from '../message/schemas/message.schema';
+import { getBlockedPipeline } from './utils/getBlockedPipeline';
+import { getConversationPipeline } from './utils/getConversationPipeline';
 
 @Injectable()
 export class ConversationService extends BaseService<ConversationDocument, Conversation> {
@@ -85,7 +85,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
     getConversation = async ({ initiator, recipientId }: { initiator: UserDocument; recipientId: string }) => {
         const recipient = await this.userService.getRecipient(recipientId, initiator._id);
 
-        const { 0: { isInitiatorBlocked, isRecipientBlocked } } = await this.blocklistModel.aggregate(isBlockedPipeline(initiator._id, recipient._id));
+        const { 0: { isInitiatorBlocked, isRecipientBlocked } } = await this.blocklistModel.aggregate(getBlockedPipeline(initiator._id, recipient._id));
         
         const conversation = (await this.aggregate(getConversationPipeline(initiator._id, recipient._id)))[0];
 
@@ -150,6 +150,29 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         }
     }
 
+    getUnreadMessagesForConversationParticipants = async (conversationId: Types.ObjectId, session?: ClientSession) => {
+        return this.aggregate(
+            [
+                { $match: { _id: conversationId } },
+                {
+                    $lookup: {
+                        from: 'messages',
+                        localField: 'messages',
+                        foreignField: '_id',
+                        as: 'messages',
+                        pipeline: [
+                            { $match: { read_by: { $size: 0 } } },
+                            { $group: { _id: '$sender', count: { $sum: 1 } } },
+                        ],
+                    },
+                },
+                { $unwind: { path: '$messages', preserveNullAndEmptyArrays: true } },
+                { $project: { messages: 1 } },
+            ],
+            { session },
+        );
+    }
+
     onMessageSend = async (dto: SendMessageParams) => {
         const { message, initiator, recipientId } = dto;
 
@@ -160,74 +183,71 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         try {
             session.startTransaction();
 
-            const { isMessagingRestricted, ...recipient } = await this.userService.getRecipient(recipientId, initiator._id, session);
+            const { isMessagingRestricted, ...recipient } = await this.userService.getRecipient(recipientId, initiator._id, session, true);
 
-            const ctx = { isNewConversation: false, conversation: null };
-
-            ctx.conversation = await this.findOne({
-                filter: { participants: { $all: [recipient._id, initiator._id] } },
-                projection: { _id: 1 },
-                options: { session },
-            });
-
-            if (!ctx.conversation) {
-                // here we prevent from sending messages from new contacts. 
-                // If initiator in deny list or recipient blocked incoming messages for everyone but initiator already have conversation
-                // with recipient then we can still send message 
-                if (isMessagingRestricted) throw new AppException({ message: 'Cannot send message' }, HttpStatus.NOT_FOUND);
-
-                ctx.isNewConversation = true;
-                ctx.conversation = (await this.create([{ participants: [recipient._id, initiator._id] }], { session }))[0];
-            }
-            
             const newMessage = (
                 await this.messageService.create(
                     [
                         {
                             sender: initiator._id,
                             text: message.trim(),
-                            source: ctx.conversation._id,
                             sourceRefPath: MessageSourceRefPath.CONVERSATION,
                         },
                     ],
                     { session },
                 )
             )[0];
+            
+            const { value, lastErrorObject }: any = await this.findOneAndUpdate({
+                filter: {
+                    participants: {
+                        $all: [{ $elemMatch: { $eq: recipient._id } }, { $elemMatch: { $eq: initiator._id } }],
+                    },
+                },
+                // THINK: right now its only a way to use upsert with this query. Cannot use just $all: [recipient._id, initiator._id]
+                update: {
+                    $setOnInsert: { participants: [recipient._id, initiator._id] },
+                    $push: { messages: newMessage._id },
+                    lastMessage: newMessage._id,
+                    lastMessageSentAt: newMessage.createdAt,
+                },
+                options: { session, new: true, upsert: true, includeResultMetadata: true, projection: { _id: 1 } },
+            });
+
+            const isNewConversation = !lastErrorObject.updatedExisting;
+
+            if (isMessagingRestricted && isNewConversation) {
+                throw new AppException(
+                    { message: 'Cannot send message. Recipient does not accept messages from new contacts' },
+                    HttpStatus.BAD_REQUEST,
+                );
+            }
 
             const _id = await this.handleFeed({ 
                 session,  
-                conversationId: ctx.conversation._id, 
+                isNewConversation,
+                conversationId: value._id, 
                 initiatorId: initiator._id,
                 recipientId: recipient._id,
                 lastActionAt: newMessage.createdAt,
-                isNewConversation: ctx.isNewConversation
             });
 
-            await ctx.conversation.updateOne(
-                {
-                    lastMessage: newMessage._id,
-                    lastMessageSentAt: newMessage.createdAt,
-                    $push: { messages: newMessage._id },
-                },
-                { session },
-            );
-
-            const unread = await this.messageService.getUnreadMessagesForConversationParticipants(ctx.conversation._id, session);
+            const unread = await this.getUnreadMessagesForConversationParticipants(value._id, session);
             const initiatorAsRecipient = await this.userService.getInitiatorAsRecipient(initiator, recipient._id, session);
 
             await BaseService.commitWithRetry(session);
 
             return {
+                isNewConversation,
                 initiatorAsRecipient,
-                isNewConversation: ctx.isNewConversation,
-                unread_recipient: unread.find(({ _id }) => _id.toString() === initiator._id.toString())?.count,
-                unread_initiator: unread.find(({ _id }) => _id.toString() === recipient._id.toString())?.count,
+                unread_recipient: unread.find(({ messages }) => messages?._id.toString() === initiator._id.toString())?.messages.count,
+                unread_initiator: unread.find(({ messages }) => messages?._id.toString() === recipient._id.toString())?.messages.count,
                 feedItem: {
                     _id,
                     type: FEED_TYPE.CONVERSATION,
                     lastActionAt: newMessage.createdAt,
                     item: {
-                        _id: ctx.conversation._id,
+                        _id: value._id,
                         lastMessage: {
                             ...newMessage.toObject(),
                             sender: {
@@ -243,6 +263,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         } catch (error) {
             if (error instanceof MongoError && error.hasErrorLabel(MongoErrorLabel.TransientTransactionError)) {
                 await session.abortTransaction();
+                
                 return this.onMessageSend(dto);
             } else {
                 !session.transaction.isCommitted && (await session.abortTransaction());
@@ -264,12 +285,12 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         try {
             session.startTransaction();
 
-            const recipient = await this.userService.getRecipient(recipientId, initiator._id, session);
+            const recipient = await this.userService.getRecipient(recipientId, initiator._id, session, true);
             const replyMessage = await this.messageService.findById(messageId, {
                 options: { populate: { path: 'sender', model: 'User', select: '_id name' }, session },
             });
 
-            if (!replyMessage) throw new AppException({ message: 'Cannot reply to a message that does not exist' }, HttpStatus.NOT_FOUND);
+            if (!replyMessage) throw new AppException({ message: 'Cannot reply to a message that does not exist' }, HttpStatus.BAD_REQUEST);
 
             const conversation = await this.findOne({
                 filter: { participants: { $all: [recipient._id, initiator._id] }, messages: { $in: replyMessage._id } },
@@ -286,7 +307,6 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
                             sender: initiator._id,
                             text: message.trim(),
                             replyTo: replyMessage._id,
-                            source: conversation._id,
                             sourceRefPath: MessageSourceRefPath.CONVERSATION,
                             inReply: true,
                         },
@@ -358,7 +378,7 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
         }
     };
 
-    onMessageEdit = async ({ messageId, initiator, message: newMessage }: EditMessageParams) => {
+    onMessageEdit = async ({ messageId, initiator, recipientId, message: newMessage }: EditMessageParams) => {
         /* TODO: fix type */
         const message: any = await this.messageService.findOneAndUpdate({
             filter: { _id: messageId, sender: initiator._id, text: { $ne: newMessage.trim() } },
@@ -366,16 +386,6 @@ export class ConversationService extends BaseService<ConversationDocument, Conve
             options: {
                 returnDocument: 'after',
                 populate: [
-                    {
-                        path: 'source',
-                        select: '_id lastMessage participants',
-                        populate: {
-                            path: 'participants',
-                            model: 'User',
-                            select: '_id',
-                            match: { _id: { $ne: initiator._id } },
-                        },
-                    },
                     {
                         path: 'replyTo',
                         model: 'Message',
