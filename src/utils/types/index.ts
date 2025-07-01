@@ -53,15 +53,17 @@ export enum AppExceptionCode {
     FORM = 'FORM',
 }
 
+export type AppExceptionErrors = Array<{ path: string | number; message: string }>;
+
 export interface IAppException {
     message: string;
-    errors?: Array<{ path: string; message: string }>;
+    errors?: AppExceptionErrors;
     errorCode?: AppExceptionCode;
 }
 
 export interface ImplementAppException {
     message: string;
-    errors?: Array<{ path: string; message: string }>;
+    errors?: AppExceptionErrors;
     errorCode?: AppExceptionCode;
     statusCode: number;
 
