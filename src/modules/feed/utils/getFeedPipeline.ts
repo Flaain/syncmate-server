@@ -97,7 +97,6 @@ export const getFeedPipeline = ({ initiatorId, ids, cursor, limit = 10 }: GetFee
                                     name: 1,
                                     login: 1,
                                     isOfficial: 1,
-                                    ...getRecipientFieldFactory('lastSeenAt', initiatorId, 'whoCanSeeMyLastSeenTime'),
                                     ...getRecipientFieldFactory('presence', initiatorId, 'whoCanSeeMyLastSeenTime'),
                                     ...getRecipientFieldFactory('avatar', initiatorId, 'whoCanSeeMyProfilePhotos'),
                                 },
@@ -124,19 +123,7 @@ export const getFeedPipeline = ({ initiatorId, ids, cursor, limit = 10 }: GetFee
                         localField: 'lastMessage',
                         foreignField: '_id',
                         as: 'lastMessage',
-                        pipeline: [
-                            {
-                                $lookup: {
-                                    from: 'users',
-                                    localField: 'sender',
-                                    foreignField: '_id',
-                                    as: 'sender',
-                                    pipeline: [{ $project: { _id: 1, name: 1 } }],
-                                },
-                            },
-                            { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
-                            { $project: { _id: 1, text: 1, createdAt: 1, sender: 1 } },
-                        ],
+                        pipeline: [{ $project: { _id: 1, text: 1, createdAt: 1 } }],
                     },
                 },
                 { $unwind: { path: '$lastMessage', preserveNullAndEmptyArrays: true } },

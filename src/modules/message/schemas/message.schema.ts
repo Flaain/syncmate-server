@@ -10,11 +10,8 @@ export class Message {
     @Prop({ type: String, required: true })
     text: string;
 
-    @Prop({ type: mongoose.Schema.Types.ObjectId, required: true, index: true, refPath: 'sourceRefPath' })
-    source: mongoose.Types.ObjectId;
-
     @Prop({ type: String, enum: MessageSourceRefPath, required: true })
-    sourceRefPath: MessageSourceRefPath;
+    sourceRefPath: MessageSourceRefPath; // TODO: maybe rename this field cuz source is no longer available
 
     @Prop({ type: Boolean, default: false })
     inReply?: boolean;

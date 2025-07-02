@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { ClientSession, HydratedDocument, Types } from 'mongoose';
 import { ConversationFeed, FeedWrapper } from 'src/modules/feed/types';
 import { Message } from 'src/modules/message/schemas/message.schema';
@@ -5,12 +6,20 @@ import { User } from 'src/modules/user/schemas/user.schema';
 import { UserDocument } from 'src/modules/user/types';
 import { Conversation } from '../schemas/conversation.schema';
 import { ConversationSettings } from '../schemas/conversation.settings.schema';
-import { MessageSendDTO } from '../dtos/message.send.dto';
+import { messageEditSchema } from '../schemas/conversation.message.edit.schema';
+import { messageSendSchema } from '../schemas/conversation.message.send.schema';
+import { messageReplySchema } from '../schemas/conversation.message.reply.schema';
+import { messageReadSchema } from '../schemas/conversation.message.read.schema';
 
 export type ConversationDocument = HydratedDocument<Conversation>;
 export type ConversationSettingsDocument = HydratedDocument<ConversationSettings>;
 export type SendMessageParams = MessageSendDTO & { recipientId: string; initiator: UserDocument };
-export type EditMessageParams = { message: string; initiator: UserDocument; messageId: string };
+export type EditMessageParams = { message: string; initiator: UserDocument; messageId: string; recipientId: string };
+
+export type MessageSendDTO = z.infer<typeof messageSendSchema>;
+export type MessageEditDTO = z.infer<typeof messageEditSchema>;
+export type MessageReplyDTO = z.infer<typeof messageReplySchema>;
+export type MessageReadDTO = z.infer<typeof messageReadSchema>;
 
 export enum CONVERSATION_EVENTS {
     JOIN = 'conversation.join',

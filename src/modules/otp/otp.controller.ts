@@ -1,9 +1,11 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Controller, Post } from '@nestjs/common';
 import { Routes } from 'src/utils/types';
-import { OtpCreateDTO } from './dtos/otp.create.dto';
 import { OtpService } from './otp.service';
-import { OtpVerifyDTO } from './dtos/otp.verify.dto';
 import { Public } from 'src/utils/decorators/public.decorator';
+import { DTO } from 'src/utils/decorators/dto.decorator';
+import { OtpCreateDTO, OtpVerifyDTO } from './types';
+import { otpCreateSchema } from './schemas/otp.create.schema';
+import { otpVerifySchema } from './schemas/otp.verify.schema';
 
 @Controller(Routes.OTP)
 export class OtpController {
@@ -11,12 +13,12 @@ export class OtpController {
 
     @Public()
     @Post()
-    create(@Body() { email, type }: OtpCreateDTO) {
+    create(@DTO(otpCreateSchema) { email, type }: OtpCreateDTO) {
         return this.otpService.createOtp({ email, type });
     }
 
     @Post('verify')
-    verify(@Body() dto: OtpVerifyDTO) {
+    verify(@DTO(otpVerifySchema) dto: OtpVerifyDTO) {
         return this.otpService.verify(dto);
     }
 }

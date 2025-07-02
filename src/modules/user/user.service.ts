@@ -13,12 +13,10 @@ import { FileService } from '../file/file.service';
 import { BlockList } from './schemas/user.blocklist.schema';
 import { userCheckSchema } from './schemas/user.check.schema';
 import { User } from './schemas/user.schema';
-import { UserDocument, UserSearchParams } from './types';
-import { UserEditDTO } from './dtos/user.edit.dto';
+import { UserDocument, UserEditDTO, UserPrivacySettingModeDTO, UserSearchParams } from './types';
 import { UserSettings } from './schemas/user.settings.schema';
 import { UserPrivacySettings } from './schemas/user.privacy.schema';
 import { getPrivacySettingsPipeline } from './utils/getPrivacySettingsPipeline';
-import { UserPrivacySettingsModeDTO } from './dtos/user.settings.privacy.mode.dto';
 import { getRecipientPipeline } from './utils/getRecipientPipeline';
 import { getInitiatorAsRecipientFieldFactory } from './utils/getInitiatorAsRecipientFieldFactory';
 
@@ -27,7 +25,7 @@ export class UserService extends BaseService<UserDocument, User> {
     constructor(
         @InjectConnection() private readonly connection: Connection,
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-        @InjectModel(UserSettings.name) private readonly settingsModel: Model<UserSettings>,
+        @InjectModel(UserSettings.name) public readonly settingsModel: Model<UserSettings>,
         @InjectModel(UserPrivacySettings.name) private readonly privacyModel: Model<UserPrivacySettings>,
         @InjectModel(BlockList.name) private readonly blocklistModel: Model<BlockList>,
         @Inject(Providers.S3_CLIENT) private readonly s3: S3Client,
@@ -85,6 +83,7 @@ export class UserService extends BaseService<UserDocument, User> {
     };
 
     check = async (dto: z.infer<typeof userCheckSchema>) => {
+        console.log(dto);
         const parsedQuery = userCheckSchema.parse(dto);
 
         if (
@@ -173,17 +172,8 @@ export class UserService extends BaseService<UserDocument, User> {
         }
     }
 
-    toRecipient = (user: UserDocument) => ({
-        _id: user._id.toString(),
-        avatar: user.avatar,
-        name: user.name,
-        login: user.login,
-        presence: user.presence,
-        isOfficial: user.isOfficial,
-    })
-
-    getRecipient = async (recipientId: string | Types.ObjectId, initiatorId: Types.ObjectId, session?: ClientSession) => {
-        const recipient = (await this.aggregate(getRecipientPipeline(recipientId, initiatorId), { session }))[0];
+    getRecipient = async (recipientId: string | Types.ObjectId, initiatorId: Types.ObjectId, session?: ClientSession, feed: boolean = false) => {
+        const recipient = (await this.aggregate(getRecipientPipeline(recipientId, initiatorId, feed), { session }))[0];
 
         if (!recipient) throw new AppException({ message: 'Recipient not found' }, HttpStatus.NOT_FOUND);
 
@@ -198,7 +188,6 @@ export class UserService extends BaseService<UserDocument, User> {
             { $unwind: { path: '$privacy_settings', preserveNullAndEmptyArrays: true } },
             {
                 $project: {
-                    ...getInitiatorAsRecipientFieldFactory('lastSeenAt', recipientId, 'whoCanSeeMyLastSeenTime'),
                     ...getInitiatorAsRecipientFieldFactory('presence', recipientId, 'whoCanSeeMyLastSeenTime'),
                     ...getInitiatorAsRecipientFieldFactory('avatar', recipientId, 'whoCanSeeMyProfilePhotos'),
                 },
@@ -207,11 +196,10 @@ export class UserService extends BaseService<UserDocument, User> {
 
         return {
             _id: initiator._id,
-            avatar: initiatorAsRecipient.avatar ? initiatorAsRecipient.avatar.url : undefined,
+            avatar: initiatorAsRecipient.avatar ? initiator.avatar : undefined,
             name: initiator.name,
             login: initiator.login,
             presence: initiatorAsRecipient.presence ? initiator.presence : undefined,
-            lastSeenAt: initiatorAsRecipient.lastSeenAt ? initiatorAsRecipient.lastSeenAt : undefined,
             isOfficial: initiator.isOfficial,
         }
     }
@@ -243,7 +231,7 @@ export class UserService extends BaseService<UserDocument, User> {
         return settings;
     };
 
-    updatePrivacySettingMode = async ({ initiator, dto: { setting, mode } }: { initiator: UserDocument; dto: UserPrivacySettingsModeDTO }) => {
+    updatePrivacySettingMode = async ({ initiator, dto: { setting, mode } }: { initiator: UserDocument; dto: UserPrivacySettingModeDTO }) => {
         const settings = await this.settingsModel.findById(initiator.settings._id);
 
         if (!settings) throw new AppException({ message: 'Settings not found' }, HttpStatus.NOT_FOUND);

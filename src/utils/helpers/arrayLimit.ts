@@ -1,0 +1,1 @@
+export const getSchemaArrayLimit = (limit: number) => (arr: Array<unknown>) => arr.length <= limit;

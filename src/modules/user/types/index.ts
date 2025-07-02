@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { User } from '../schemas/user.schema';
 import mongoose, { HydratedDocument, Types } from 'mongoose';
-import { HttpStatus } from '@nestjs/common';
-import { IPagination, RequestWithUser, WrappedInPagination } from 'src/utils/types';
-import { userCheckSchema } from '../schemas/user.check.schema';
+import { IPagination } from 'src/utils/types';
+import { userEditSchema } from '../schemas/user.edit.schema';
+import { userPrivacySettingModeSchema } from '../schemas/user.settings.privacy.mode.schema';
 
 export enum PRESENCE {
     ONLINE = 'online',
@@ -20,19 +20,14 @@ export const PRIVACY_MODE = {
 } as const;
 
 export type CheckType = 'email' | 'login';
+
 export type PrivacyMode = keyof typeof PRIVACY_MODE;
+
+export type UserEditDTO = z.infer<typeof userEditSchema>;
+export type UserPrivacySettingModeDTO = z.infer<typeof userPrivacySettingModeSchema>;
+
 export type UserDocument = HydratedDocument<User>;
 export type UserSearchParams = IPagination & { initiatorId: Types.ObjectId };
-
-export interface IUserController {
-    check(type: CheckType, email: string, login: string): Promise<{ status: HttpStatus; message: string }>;
-    search(req: RequestWithUser, pagination: IPagination): Promise<WrappedInPagination<Array<Pick<UserDocument, '_id' | 'name' | 'login' | 'isOfficial'>>>>;
-}
-
-export interface IUserService {
-    check: ({ type, email, login }: z.infer<typeof userCheckSchema>) => Promise<{ status: HttpStatus; message: string }>;
-    search: ({ initiatorId, query, page, limit }: UserSearchParams) => Promise<Array<Pick<UserDocument, '_id' | 'name' | 'login'>>>;
-}
 
 export interface PrivacySetting {
     mode: PrivacyMode,

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { SchemaTimestampsConfig } from 'mongoose';
-import { OtpCreateSchema } from '../schemas/otp.create.schema';
+import { otpCreateSchema } from '../schemas/otp.create.schema';
 import { Document } from 'mongoose';
+import { otpVerifySchema } from '../schemas/otp.verify.schema';
 
 export enum OtpType {
     EMAIL_VERIFICATION = 'email_verification',
@@ -19,10 +20,5 @@ export interface IOtp {
 
 export type OtpDocument = IOtp & Document & SchemaTimestampsConfig;
 
-export interface IOtpService {
-    createOtp: (dto: Pick<IOtp, 'email' | 'type'>) => Promise<{ retryDelay?: number }>;
-}
-
-export interface IOtpController {
-    create: (dto: z.infer<typeof OtpCreateSchema>) => Promise<{ retryDelay?: number }>;
-}
+export type OtpCreateDTO = z.infer<typeof otpCreateSchema>;
+export type OtpVerifyDTO = z.infer<typeof otpVerifySchema>;

@@ -1,5 +1,5 @@
-import { PipelineStage, Types } from 'mongoose';
-import { MESSAGES_BATCH } from 'src/utils/constants';
+import { PipelineStage, Types } from "mongoose";
+import { MESSAGES_BATCH } from "src/utils/constants";
 
 export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId: Types.ObjectId, cursor?: string): Array<PipelineStage> => [
     { $match: { participants: { $all: [initiatorId, recipientId] } } },
@@ -19,19 +19,7 @@ export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId
                         localField: 'sender',
                         foreignField: '_id',
                         as: 'sender',
-                        pipeline: [
-                            { $project: { name: 1, isDeleted: 1, avatar: 1 } },
-                            {
-                                $lookup: {
-                                    from: 'files',
-                                    localField: 'avatar',
-                                    foreignField: '_id',
-                                    as: 'avatar',
-                                    pipeline: [{ $project: { url: 1 } }],
-                                },
-                            },
-                            { $unwind: { path: '$avatar', preserveNullAndEmptyArrays: true } },
-                        ],
+                        pipeline: [{ $project: { name: 1, isDeleted: 1 } }]
                     },
                 },
                 {
@@ -103,25 +91,4 @@ export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId
     },
     { $unset: 'm' },
     { $project: { messages: 1 } },
-];
-
-export const isBlockedPipeline = (initiatorId: Types.ObjectId, recipientId: Types.ObjectId) => [
-    {
-        $facet: {
-            isInitiatorBlocked: [
-                { $match: { user: recipientId, $expr: { $in: [initiatorId, { $ifNull: ['$blocklist', []] }] } } },
-                { $project: { isBlocked: { $literal: true } } },
-            ],
-            isRecipientBlocked: [
-                { $match: { user: initiatorId, $expr: { $in: [recipientId, { $ifNull: ['$blocklist', []] }] } } },
-                { $project: { isBlocked: { $literal: true } } },
-            ],
-        },
-    },
-    {
-        $project: {
-            isInitiatorBlocked: { $first: '$isInitiatorBlocked.isBlocked' },
-            isRecipientBlocked: { $first: '$isRecipientBlocked.isBlocked' },
-        },
-    },
 ];

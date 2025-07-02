@@ -1,15 +1,22 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ConversationService } from './conversation.service';
 import { RequestWithUser, Routes } from 'src/utils/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { CONVERSATION_EVENTS } from './types';
+import { CONVERSATION_EVENTS, MessageEditDTO, MessageReadDTO, MessageReplyDTO, MessageSendDTO } from './types';
 import { defaultSuccessResponse, paramPipe } from 'src/utils/constants';
-import { MessageSendDTO } from './dtos/message.send.dto';
-import { MessageReplyDTO } from './dtos/message.reply.dto';
+import { Throttle } from '@nestjs/throttler';
+import { DTO } from 'src/utils/decorators/dto.decorator';
+import { messageEditSchema } from './schemas/conversation.message.edit.schema';
+import { messageSendSchema } from './schemas/conversation.message.send.schema';
+import { messageReplySchema } from './schemas/conversation.message.reply.schema';
+import { messageReadSchema } from './schemas/conversation.message.read.schema';
 
 @Controller(Routes.CONVERSATION)
 export class ConversationController {
-    constructor(private readonly conversationService: ConversationService, private readonly eventEmitter: EventEmitter2) {}
+    constructor(
+        private readonly conversationService: ConversationService,
+        private readonly eventEmitter: EventEmitter2,
+    ) {}
 
     @Get(':id')
     getConversation(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {
@@ -18,19 +25,27 @@ export class ConversationController {
 
     @Delete('delete/:id')
     async delete(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string) {
-        const { _id, recipientId } = await this.conversationService.deleteConversation({ initiatorId: req.doc.user._id, recipientId: id });
-        
-        this.eventEmitter.emit(CONVERSATION_EVENTS.DELETED, { 
+        const { _id, recipientId } = await this.conversationService.deleteConversation({
+            initiatorId: req.doc.user._id,
+            recipientId: id,
+        });
+
+        this.eventEmitter.emit(CONVERSATION_EVENTS.DELETED, {
             recipientId,
-            initiatorId: req.doc.user._id.toString(), 
-            conversationId: _id.toString()
+            initiatorId: req.doc.user._id.toString(),
+            conversationId: _id.toString(),
         });
 
         return { conversationId: _id };
     }
 
     @Post('message/send/:recipientId')
-    async send(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('recipientId', paramPipe) recipientId: string) {
+    @Throttle({ default: { limit: 100, ttl: 60000 } })
+    async send(
+        @Req() { doc: { user } }: RequestWithUser,
+        @DTO(messageSendSchema) dto: MessageSendDTO,
+        @Param('recipientId', paramPipe) recipientId: string,
+    ) {
         const { feedItem, unread_initiator, initiatorAsRecipient, unread_recipient, isNewConversation } = await this.conversationService.onMessageSend({
             ...dto,
             recipientId,
@@ -43,10 +58,10 @@ export class ConversationController {
             conversationId: feedItem.item._id.toString(),
         });
 
-        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
+        this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, { 
             feedItem,
             initiatorAsRecipient,
-            unread_initiator, 
+            unread_initiator,
             unread_recipient,
             session_id: dto.session_id,
         });
@@ -55,8 +70,16 @@ export class ConversationController {
     }
 
     @Post('message/reply/:messageId')
-    async reply(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageReplyDTO, @Param('messageId', paramPipe) messageId: string) {
-        const { feedItem, unread_initiator, initiatorAsRecipient, unread_recipient, } = await this.conversationService.onMessageReply({ ...dto, messageId, initiator: user });
+    async reply(
+        @Req() { doc: { user } }: RequestWithUser,
+        @DTO(messageReplySchema) dto: MessageReplyDTO,
+        @Param('messageId', paramPipe) messageId: string,
+    ) {
+        const { feedItem, unread_initiator, initiatorAsRecipient, unread_recipient } = await this.conversationService.onMessageReply({ 
+            ...dto, 
+            messageId, 
+            initiator: user 
+        });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_SEND, {
             feedItem,
@@ -70,10 +93,15 @@ export class ConversationController {
     }
 
     @Patch('message/edit/:messageId')
-    async edit(@Req() { doc: { user } }: RequestWithUser, @Body() dto: MessageSendDTO, @Param('messageId', paramPipe) messageId: string) {
+    async edit(
+        @Req() { doc: { user } }: RequestWithUser,
+        @DTO(messageEditSchema) dto: MessageEditDTO,
+        @Param('messageId', paramPipe) messageId: string,
+    ) {
         const { message, conversationId, isLastMessage, recipientId } = await this.conversationService.onMessageEdit({
             messageId,
             initiator: user,
+            recipientId: dto.recipientId,
             message: dto.message,
         });
 
@@ -94,10 +122,14 @@ export class ConversationController {
     @Patch('message/read/:messageId')
     async read(
         @Req() { doc: { user } }: RequestWithUser,
-        @Body() { recipientId }: Pick<MessageReplyDTO, 'recipientId' | 'session_id'>,
+        @DTO(messageReadSchema) { recipientId }: MessageReadDTO,
         @Param('messageId', paramPipe) messageId: string,
     ) {
-        const { conversationId, readedAt } = await this.conversationService.onMessageRead({ messageId, initiator: user, recipientId });
+        const { conversationId, readedAt } = await this.conversationService.onMessageRead({
+            messageId,
+            initiator: user,
+            recipientId,
+        });
 
         this.eventEmitter.emit(CONVERSATION_EVENTS.MESSAGE_READ, {
             conversationId,
@@ -124,8 +156,12 @@ export class ConversationController {
         return data.findedMessageIds;
     }
 
-    @Get("previous-messages/:id")
-    getPreviousMessages(@Req() req: RequestWithUser, @Param('id', paramPipe) id: string, @Query('cursor', paramPipe) cursor: string) {
-        return this.conversationService.getPreviousMessages({ recipientId: id, cursor, initiator: req.doc.user })
+    @Get('previous-messages/:id')
+    getPreviousMessages(
+        @Req() req: RequestWithUser,
+        @Param('id', paramPipe) id: string,
+        @Query('cursor', paramPipe) cursor: string,
+    ) {
+        return this.conversationService.getPreviousMessages({ recipientId: id, cursor, initiator: req.doc.user });
     }
 }

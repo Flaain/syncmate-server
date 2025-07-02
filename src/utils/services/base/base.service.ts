@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { MongoError, MongoErrorLabel } from 'mongodb';
 import {
     AggregateOptions,
@@ -15,8 +14,7 @@ import {
 } from 'mongoose';
 import { FindQuery, UpdateQuery } from 'src/utils/types';
 
-@Injectable()
-export class BaseService<Doc extends Document, Entity> {
+export abstract class BaseService<Doc extends Document, Entity> {
     constructor(private readonly model: Model<Doc>) {}
 
     static commitWithRetry = async (session: ClientSession, retryCount = 3) => {
@@ -42,7 +40,7 @@ export class BaseService<Doc extends Document, Entity> {
     findOneAndDelete = (filter: FilterQuery<Doc>, options: QueryOptions<Doc> = {}) => this.model.findOneAndDelete(filter, options);
     deleteMany = (filter: FilterQuery<Doc>, options?: MongooseBaseQueryOptions<Doc> | null) => this.model.deleteMany(filter, options);
     updateOne = ({ filter, update, options }: UpdateQuery<Doc, any>) => this.model.updateOne(filter, update, options);
-    updateMany = ({ filter, update, options }: UpdateQuery<Doc, any>) => this.model.updateMany(filter, update, options); // any for now cuz i can't find UpdateOptions interface
+    updateMany = ({ filter, update, options }: UpdateQuery<Doc, any>) => this.model.updateMany(filter, update, options);
     findOneAndUpdate = ({ filter, update, options }: UpdateQuery<Doc>) => this.model.findOneAndUpdate(filter, update, options);
     aggregate = (pipeline: Array<PipelineStage>, options?: AggregateOptions) => this.model.aggregate(pipeline, options);
 }

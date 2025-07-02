@@ -3,10 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { OTP } from './schemas/otp.schema';
 import { AppException } from 'src/utils/exceptions/app.exception';
-import { OtpDocument, OtpType } from './types';
+import { OtpDocument, OtpType, OtpVerifyDTO } from './types';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
-import { OtpVerifyDTO } from './dtos/otp.verify.dto';
 import { BaseService } from 'src/utils/services/base/base.service';
 import { defaultSuccessResponse } from 'src/utils/constants';
 

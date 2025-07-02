@@ -8,18 +8,13 @@ import { AN_ERROR_OCCURRED, defaultSuccessResponse } from 'src/utils/constants';
 import { AppException } from 'src/utils/exceptions/app.exception';
 import { BcryptService } from 'src/utils/services/bcrypt/bcrypt.service';
 import { JWT_KEYS } from 'src/utils/types';
-import { z } from 'zod';
 import { OtpService } from '../otp/otp.service';
 import { OtpType } from '../otp/types';
 import { SessionService } from '../session/session.service';
 import { SessionDocument } from '../session/types';
 import { UserDocument } from '../user/types';
 import { UserService } from '../user/user.service';
-import { AuthResetDTO } from './dtos/auth.reset.dto';
-import { SigninDTO } from './dtos/auth.signin.dto';
-import { SignupDTO } from './dtos/auth.signup.dto';
-import { authChangePasswordSchema } from './schemas/auth.change.password.schema';
-import { WithUserAgent } from './types';
+import { AuthChangePasswordDTO, AuthResetDTO, SigninDTO, SignupDTO, WithUserAgent } from './types';
 import { FeedService } from '../feed/feed.service';
 import { BaseService } from 'src/utils/services/base/base.service';
 
@@ -98,6 +93,7 @@ export class AuthService {
 
     signup = async (dto: WithUserAgent<Required<SignupDTO>>) => {
         const { password, otp, userAgent, userIP, ...data } = dto;
+        
         const session = await this.connection.startSession();
 
         session.startTransaction();
@@ -185,20 +181,18 @@ export class AuthService {
         }
     };
 
-    changePassword = async (data: z.infer<typeof authChangePasswordSchema> & { initiator: UserDocument }) => {
-        const { initiator, ...dto } = data;
+    changePassword = async (data: AuthChangePasswordDTO & { initiator: UserDocument }) => {
+        const { initiator, type } = data;
 
-        const parsedQuery = authChangePasswordSchema.parse(dto);
-
-        if (!(await this.bcryptService.compareAsync(dto.currentPassword, initiator.password))) {
+        if (!(await this.bcryptService.compareAsync(data.currentPassword, initiator.password))) {
             throw new AppException({
                 message: 'Incorrect password',
                 errors: [{ path: 'currentPassword', message: 'Incorrect password' }],
             }, HttpStatus.CONFLICT);
         }
 
-        if (parsedQuery.type === 'set') {
-            const hashedPassword = await this.bcryptService.hashAsync(dto.newPassword);
+        if (type === 'set') {
+            const hashedPassword = await this.bcryptService.hashAsync(data.newPassword);
             const session = await this.connection.startSession();
 
             session.startTransaction();

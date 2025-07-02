@@ -6,17 +6,6 @@ import { isValidObjectId } from 'mongoose';
 
 export const MESSAGES_BATCH = 25;
 
-export const recipientProjection = {
-    _id: 1,
-    name: 1,
-    email: 1,
-    login: 1,
-    avatar: 1,
-    isOfficial: 1,
-    // presence: 1,
-    lastSeenAt: 1,
-};
-
 export const AN_ERROR_OCCURRED = 'An error occurred during the request. Please try again.';
 
 export const paramPipe: PipeTransform = { transform: validateParamId };
@@ -67,7 +56,7 @@ export const messageForSchema = z
     .string()
     .trim()
     .min(1, "Message can't be empty")
-    .max(10000, "Message can't be longer than 10000 characters");
+    .max(3000, "Message can't be longer than 3000 characters");
 
 export const emailForSchema = z
     .string()

@@ -1,9 +1,9 @@
 import { HttpStatus } from '@nestjs/common';
-import { AppExceptionCode, IAppException, ImplementAppException } from '../types';
+import { AppExceptionCode, AppExceptionErrors, IAppException, ImplementAppException } from '../types';
 
 export class AppException extends Error implements ImplementAppException {
     public errorCode?: AppExceptionCode;
-    public errors?: Array<{ path: string; message: string }>;
+    public errors?: AppExceptionErrors;
 
     constructor(error: IAppException, public statusCode: HttpStatus) {
         super(error.message);
