@@ -1,94 +1,133 @@
-import { PipelineStage, Types } from "mongoose";
-import { MESSAGES_BATCH } from "src/utils/constants";
+import { PipelineStage, Types } from 'mongoose';
+import { MESSAGES_BATCH } from 'src/shared/constants';
 
-export const getConversationPipeline = (initiatorId: Types.ObjectId, recipientId: Types.ObjectId, cursor?: string): Array<PipelineStage> => [
+const PREV = 10;
+
+export const getConversationPipeline = (
+    initiatorId: Types.ObjectId,
+    recipientId: Types.ObjectId,
+): Array<PipelineStage> => [
     { $match: { participants: { $all: [initiatorId, recipientId] } } },
     {
         $lookup: {
             from: 'messages',
             localField: 'messages',
             foreignField: '_id',
-            as: 'm',
-            pipeline: [
-                { $match: cursor ? { _id: { $lt: new Types.ObjectId(cursor) } } : {} },
-                { $sort: { createdAt: -1 } },
-                { $limit: MESSAGES_BATCH },
-                {
-                    $lookup: {
-                        from: 'users',
-                        localField: 'sender',
-                        foreignField: '_id',
-                        as: 'sender',
-                        pipeline: [{ $project: { name: 1, isDeleted: 1 } }]
+            as: 'all_messages',
+            pipeline: [{ $sort: { createdAt: 1 } }],
+        },
+    },
+    { 
+        $addFields: {
+            oldest_unread: {
+                $first: {
+                    $filter: {
+                        input: '$all_messages',
+                        as: 'message',
+                        cond: { $and: [{ $eq: ['$$message.sender', recipientId] }, { $eq: [{ $size: '$$message.readedBy' }, 0] }] },
+                    }
+                }
+            }
+        }
+    },
+    {
+        $project: {
+            messages: {
+                $let: {
+                    vars: {
+                        oldest_unread: '$$ROOT.oldest_unread',
+                        all: '$$ROOT.all_messages',
                     },
-                },
-                {
-                    $lookup: {
-                        from: 'messages',
-                        localField: 'replyTo',
-                        foreignField: '_id',
-                        as: 'replyTo',
-                        pipeline: [
-                            { $project: { text: 1, sender: 1 } },
-                            {
-                                $lookup: {
-                                    from: 'users',
-                                    localField: 'sender',
-                                    foreignField: '_id',
-                                    as: 'sender',
-                                    pipeline: [{ $project: { name: 1 } }],
+                    in: {
+                        $let: {
+                            vars: {
+                                oldest_unread_index: {
+                                    $cond: {
+                                        if: '$$oldest_unread',
+                                        then: { $indexOfArray: ['$$all', '$$oldest_unread'] },
+                                        else: -1,
+                                    },
                                 },
                             },
-                            { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
-                        ],
-                    },
-                },
-                { $unwind: { path: '$attachments', preserveNullAndEmptyArrays: true } },
-                { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
-                { $unwind: { path: '$sender', preserveNullAndEmptyArrays: true } },
-                {
-                    $addFields: {
-                        hasBeenRead: {
-                            $cond: {
-                                if: { $and: [{ $eq: ['$sender._id', initiatorId] }, { $in: [recipientId, '$read_by'] }] },
-                                then: true,
-                                else: '$$REMOVE',
-                            },
-                        },
-                        alreadyRead: {
-                            $cond: {
-                                if: { $and: [{ $eq: ['$sender._id', recipientId] }, { $in: [initiatorId, '$read_by'] }] },
-                                then: true,
-                                else: '$$REMOVE',
-                            },
-                        },
-                    },
-                },
-                { $project: { source: 0, read_by: 0, replies: 0 } },
-            ],
-        },
-    },
-    { $project: { messages: 0 } },
-    {
-        $addFields: {
-            messages: {
-                data: { 
-                    $map: {
-                        input: { $reverseArray: '$m' },
-                        as: 'msg',
-                        in: ['$$msg._id', '$$msg']
+                            in: {
+                                $let: {
+                                    vars: {
+                                        possible_start: {
+                                            $cond: {
+                                                if: { $eq: ['$$oldest_unread_index', -1] },
+                                                then: { $max: [0, { $subtract: [{ $size: '$$all' }, MESSAGES_BATCH] }] },
+                                                else: { $max: [0, { $subtract: ['$$oldest_unread_index', PREV] }] },
+                                            },
+                                        },
+                                    },
+                                    in: {
+                                        $let: {
+                                            vars: {
+                                                available: {
+                                                    $subtract: [{ $size: '$$all' }, '$$possible_start'],
+                                                },
+                                            },
+                                            in: {
+                                                $let: {
+                                                    vars: {
+                                                        shortfall: {
+                                                            $cond: {
+                                                                if: { $and: [{ $lt: ['$$available', MESSAGES_BATCH] }, { $ne: ['$$oldest_unread_index', -1] }] },
+                                                                then: { $subtract: [MESSAGES_BATCH, '$$available'] },
+                                                                else: 0,
+                                                            },
+                                                        },
+                                                    },
+                                                    in: {
+                                                        $let: {
+                                                            vars: {
+                                                                startIndex: {
+                                                                    $max: [0, { $subtract: ['$$possible_start', '$$shortfall'] }],
+                                                                },
+                                                            },
+                                                            in: {
+                                                                $let: {
+                                                                    vars: {
+                                                                        data: { $slice: ['$$all', '$$startIndex', MESSAGES_BATCH] },
+                                                                    },
+                                                                    in: {
+                                                                        data: '$$data',
+                                                                        prevCursor: {
+                                                                            $cond: {
+                                                                                if: { $gt: ['$$startIndex', 0] },
+                                                                                then: {
+                                                                                    $let: {
+                                                                                        vars: {
+                                                                                            prevMsg: { $arrayElemAt: ['$$all', { $subtract: ['$$startIndex', 1] }] },
+                                                                                        },
+                                                                                        in: '$$prevMsg._id'
+                                                                                    }
+                                                                                },
+                                                                                else: null,
+                                                                            },
+                                                                        },
+                                                                        nextCursor: {
+                                                                            $cond: {
+                                                                                if: { $gt: [{ $size: { $slice: ['$$all', '$$startIndex', MESSAGES_BATCH + 1] } }, MESSAGES_BATCH] },
+                                                                                then: { $getField: { field: '_id', input: { $arrayElemAt: ['$$data', -1] } } },
+                                                                                else: null,
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                },
-                nextCursor: {
-                    $cond: {
-                        if: { $eq: [{ $size: '$m' }, MESSAGES_BATCH] },
-                        then: { $arrayElemAt: ['$m._id', -1] },
-                        else: null,
-                    },
-                },
-            },
-        },
-    },
-    { $unset: 'm' },
-    { $project: { messages: 1 } },
+                }
+            }
+        }
+    }
 ];
