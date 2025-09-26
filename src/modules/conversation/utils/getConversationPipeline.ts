@@ -14,7 +14,38 @@ export const getConversationPipeline = (
             localField: 'messages',
             foreignField: '_id',
             as: 'all_messages',
-            pipeline: [{ $sort: { createdAt: 1 } }],
+            pipeline: [
+                {
+                    $addFields: {
+                        hasBeenRead: {
+                            $cond: {
+                                if: { $and: [{ $eq: ['$sender', initiatorId] }, { $in: [recipientId, '$readedBy'] }] },
+                                then: true,
+                                else: '$$REMOVE',
+                            },
+                        },
+                        alreadyRead: {
+                            $cond: {
+                                if: { $and: [{ $eq: ['$sender', recipientId] }, { $in: [initiatorId, '$readedBy'] }] },
+                                then: true,
+                                else: '$$REMOVE',
+                            },
+                        },
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'messages',
+                        localField: 'replyTo',
+                        foreignField: '_id',
+                        as: 'replyTo',
+                        pipeline: [{ $project: { text: 1 } }],
+                    },
+                },
+                { $unwind: { path: '$replyTo', preserveNullAndEmptyArrays: true } },
+                { $sort: { createdAt: 1 } },
+                { $project: { readedBy: 0, replies: 0 } },
+            ],
         },
     },
     { 
@@ -24,7 +55,7 @@ export const getConversationPipeline = (
                     $filter: {
                         input: '$all_messages',
                         as: 'message',
-                        cond: { $and: [{ $eq: ['$$message.sender', recipientId] }, { $eq: [{ $size: '$$message.readedBy' }, 0] }] },
+                        cond: { $and: [{ $eq: ['$$message.sender', recipientId] }, { $ifNull: ['$$message.alreadyRead', true] }] },
                     }
                 }
             }
